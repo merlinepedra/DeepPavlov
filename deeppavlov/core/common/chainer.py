@@ -254,7 +254,6 @@ class Chainer(Component):
             batch = [list(islice(arg, batch_size)) for arg in args]
             if not any(batch):  # empty batch, reached the end
                 break
-
             curr_answer = self.__call__(*batch)
             if len(self.out_params) == 1:
                 curr_answer = [curr_answer]

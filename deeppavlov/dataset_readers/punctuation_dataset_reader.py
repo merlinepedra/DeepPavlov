@@ -47,11 +47,13 @@ def recalculate_head_indexes(heads, word_indexes):
     return answer
 
 
-def read_ud_punctuation_file(infile, read_syntax=False, max_sents=-1):
+def read_ud_punctuation_file(infile, read_syntax=False, min_length=5, max_sents=-1):
     data = read_ud_infile(infile, read_syntax=read_syntax, max_sents=max_sents)
     word_sents, punct_sents = [], []
     for source_sent, tag_sent in data:
         word_sent, punct_sent, word_indexes = make_word_punct_sents(source_sent)
+        if len(word_sent) < min_length:
+            continue
         word_sents.append(word_sent)
         if read_syntax:
             tag_sent, head_sent, dep_sent = tag_sent
@@ -117,12 +119,17 @@ class UDPunctuationDatasetReader(DatasetReader):
         for data_type, infile, data_format in zip(data_types, data_path, data_formats):
             if data_type not in data_types:
                 continue
+            if data_type != "train":
+                min_length = kwargs.pop("min_length", 0)
+            else:
+                min_length = kwargs.pop("min_length", 5)
+            print(data_type, min_length)
             if data_format == "ud":
-                answer[data_type] += read_ud_punctuation_file(infile, **kwargs)
+                answer[data_type] += read_ud_punctuation_file(infile, min_length=min_length, **kwargs)
             elif data_format == "tokenized":
-                answer[data_type] += read_punctuation_file(infile, to_tokenize=False, **kwargs)
+                answer[data_type] += read_punctuation_file(infile, min_length=min_length, to_tokenize=False, **kwargs)
             elif data_format == "text":
-                answer[data_type] += read_punctuation_file(infile, to_tokenize=True, **kwargs)
+                answer[data_type] += read_punctuation_file(infile, min_length=min_length, to_tokenize=True, **kwargs)
             else:
                 continue
         return answer
