@@ -41,7 +41,7 @@ class ELMoEmbedder(Component, metaclass=TfModelMeta):
     """
     def __init__(self, model_dir: str, forward_direction_sequence: bool = True,
                  backward_direction_sequence: bool = True, pad_zero: bool = False,
-                 output_layer="lstm", single_pass=False, max_token: Optional[int] = None,
+                 output_layer="softmax", single_pass=False, max_token: Optional[int] = None,
                  init_states_before_all=True, mini_batch_size: int = 32,
                  **kwargs) -> None:
 
@@ -297,28 +297,29 @@ def my_softmax(x, axis=-1):
 @register('elmo_probability_predictor')
 class ELMoWordProbabilityPredictor(ELMoEmbedder):
 
-    def __init__(self, **kwargs):
+    def __init__(self, unk_mult=1e-4, **kwargs):
         super().__init__(output_layer="lstm", **kwargs)
+        self.unk_mult = unk_mult
         self.vocab = self.get_vocab()
         self.inverse_vocab = {word: i for i, word in enumerate(self.vocab)}
+        self.softmax_b[self.inverse_vocab["<UNK>"]] += np.log(self.unk_mult)
 
     def _load(self):
         model, sess, init_states, batcher, options = super()._load()
-        config = tf.ConfigProto(allow_soft_placement=True)
-        sess = tf.Session(config=config)
-        sess.run(tf.global_variables_initializer())
         self.softmax_W = sess.run(model.softmax_W, dict())
         self.softmax_b = sess.run(model.softmax_b, dict())
         return model, sess, init_states, batcher, options
 
 
-    def _mini_batch_fit(self, *args, **kwargs):
-        raise NotImplementedError("ELMoWordProbabilityPredictor does not implement '_mini_batch_fit'")
+    # def _mini_batch_fit(self, *args, **kwargs):
+    #     raise NotImplementedError("ELMoWordProbabilityPredictor does not implement '_mini_batch_fit'")
 
     def __call__(self, batch: List[List[str]], candidate_batch: List[Union[List[List[str]], Dict[int, List[str]]]], *args, **kwargs):
-        states = super()(batch)
+        padded_batch = [(["<S>"] + sent + ["</S>"]) for sent in batch]
+        states = ELMoEmbedder.__call__(self, padded_batch)
         answer = []
         for state_sent, candidate_sent in zip(states, candidate_batch):
+            state_sent = state_sent[1:-1]
             if isinstance(candidate_sent, dict):
                 candidate_sent = [candidate_sent[i] if i in candidate_sent else [] for i in range(len(state_sent))]
             curr_answer = [[[], []] for _ in state_sent]
@@ -326,14 +327,14 @@ class ELMoWordProbabilityPredictor(ELMoEmbedder):
                 if len(candidates) == 0:
                     continue
                 elif len(candidates) == 1:
-                    curr_answer[i] = [[1.0], [1.0]]
+                    curr_answer[i] = np.ones(dtype=float, shape=(2, 1))
                     continue
-                candidate_indexes = [self.inverse_vocab[word] for word in candidates]
+                candidate_indexes = [self.inverse_vocab.get(word, self.inverse_vocab["<UNK>"]) for word in candidates]
                 candidate_embeddings = self.softmax_W[candidate_indexes]
                 candidate_biases = self.softmax_b[candidate_indexes]
-                left_logits = np.dot(left_state, candidate_embeddings .T) + candidate_biases
-                right_logits = np.dot(right_state, candidate_embeddings .T) + candidate_biases
-                curr_answer[i] = [softmax(left_logits), softmax(right_logits)]
+                left_logits = np.dot(left_state, candidate_embeddings.T) + candidate_biases
+                right_logits = np.dot(right_state, candidate_embeddings.T) + candidate_biases
+                curr_answer[i] = softmax([left_logits, right_logits])
             answer.append(curr_answer)
         return answer
 
