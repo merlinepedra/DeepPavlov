@@ -696,7 +696,9 @@ class SegmentTransducer:
         sets 1.0 cost for every replacement, insertion, deletion and transposition
         """
         self.operation_costs = dict()
-        self.operation_costs[""] = {c: 1.0 for c in list(self.alphabet) + [' ']}
+        self.operation_costs[""] = {c: 1.0 for c in list(self.alphabet)}
+        if allow_spaces:
+            self.operation_costs[""][" "] = 1.0
         for a in self.alphabet:
             current_costs = {c: 1.0 for c in self.alphabet}
             current_costs[a] = 0.0
