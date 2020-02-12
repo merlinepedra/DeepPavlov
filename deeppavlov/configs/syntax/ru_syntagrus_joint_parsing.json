@@ -1,5 +1,17 @@
 {
-    "chainer": {
+    "dataset_reader": {
+        "class_name": "morphotagger_dataset_reader",
+        "data_path": "{DOWNLOADS_PATH}/UD2.3_source",
+        "language": "ru_syntagrus",
+        "data_types": [
+          "train", "dev", "test"
+        ],
+        "read_syntax": true
+      },
+      "dataset_iterator": {
+        "class_name": "morphotagger_dataset"
+      },
+      "chainer": {
         "in": [
             "x_words"
         ],

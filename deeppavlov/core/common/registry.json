@@ -1,5 +1,8 @@
 {
   "UD_pymorphy_lemmatizer": "deeppavlov.models.morpho_tagger.lemmatizer:UDPymorphyLemmatizer",
+  "morphorueval_lemmatizer": "deeppavlov.models.morpho_tagger.lemmatizer:MorphoRuEvalLemmatizer",
+  "morphorueval_tag_normalizer": "deeppavlov.models.morpho_tagger.common_tagger:MorphoRuEvalTagNormalizer",
+  "emoji_postprocessor": "deeppavlov.models.morpho_ru_eval.postprocessor:EmojiPostprocessor",
   "aiml_skill": "deeppavlov.skills.aiml_skill.aiml_skill:AIMLSkill",
   "amazon_ecommerce_reader": "deeppavlov.dataset_readers.amazon_ecommerce_reader:AmazonEcommerceReader",
   "api_requester": "deeppavlov.models.api_requester.api_requester:ApiRequester",
