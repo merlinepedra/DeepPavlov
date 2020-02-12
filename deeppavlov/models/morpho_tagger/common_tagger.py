@@ -14,6 +14,9 @@
 
 """File containing common operation with keras.backend objects"""
 
+from deeppavlov.core.common.registry import register
+from deeppavlov.core.models.component import Component
+
 from typing import Union, Optional, Tuple
 
 import keras.backend as kb
@@ -126,3 +129,31 @@ def get_tag_distance(first, second, first_sep=",", second_sep=" "):
     for key in second_feats:
         dist += int(key not in first_feats and key not in IDLE_FEATURES)
     return dist
+
+
+@register("morphorueval_tag_normalizer")
+class MorphoRuEvalTagNormalizer(Component):
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def _process(self, tag, lemma):
+        pos, feats = make_pos_and_tag(tag, return_mode="dict")
+        # краткие прилагательные
+        if "Variant" in feats and feats["Variant"] == "Short":
+            feats["Case"] = "Nom"
+        # залог у "быть"
+        if lemma == "быть" and pos == "AUX":
+            feats.pop("Voice", None)
+        # частицы
+        if pos == "PART" and lemma in ["не", "ни"]:
+            feats["Polarity"] = "Neg"
+        # местоимения
+        if lemma in ["себя", "себе"]:
+            feats["Reflex"] = "Yes"
+        tag = make_full_UD_tag(pos, feats, mode="dict")
+        return tag
+
+    def __call__(self, batch, lemmas):
+        return [[self._process(*elem) for elem in zip(tag_sent, lemmas_sent)]
+                for tag_sent, lemmas_sent in zip(batch, lemmas)]
