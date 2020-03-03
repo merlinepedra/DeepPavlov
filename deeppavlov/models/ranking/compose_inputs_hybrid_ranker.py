@@ -60,11 +60,13 @@ class ComposeInputsHybridRanker(Component):
                 queries.append(" ".join(expanded_context))
             elif self.use_user_context_for_query:
                 queries = []
-                for i in expanded_context[1::2]:
+                for i in expanded_context[::-1][0::2][::-1]:
                     if len(i) > 0: queries.append(i)
-                queries.append(" ".join(expanded_context[1::2]))
+                queries.append(" ".join(expanded_context[::-1][0::2][::-1]))
             else:
                 queries = expanded_context[:-1]
+            logger.info(f"expanded_context={expanded_context}")
+            logger.info(f"queries={queries}")
 
             # logger.debug("\n\n[START]\nqueries: " + str(queries))   # DEBUG
             query_batch.append(queries)
