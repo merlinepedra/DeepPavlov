@@ -52,6 +52,7 @@ class ComposeInputsHybridRanker(Component):
                 if not self.history_includes_last_utterance else history_batch[i][-self.num_context_turns:]
             expanded_context = self._expand_context(full_context, padding="pre", context_depth=self.query_context_depth)
 
+            # logger.debug(f"expanded_context={expanded_context}")
             # search TF-IDF by last utterance only OR using all history
             if self.use_history:
                 queries = []
@@ -60,18 +61,18 @@ class ComposeInputsHybridRanker(Component):
                 queries.append(" ".join(expanded_context))
             elif self.use_user_context_for_query:
                 queries = []
-                for i in expanded_context[::-1][0::2][::-1]:
+                for i in expanded_context[::-1][1::2][::-1]:
                     if len(i) > 0: queries.append(i)
-                queries.append(" ".join(expanded_context[::-1][0::2][::-1]))
+                queries.append(" ".join(expanded_context[::-1][1::2][::-1]))
             else:
                 queries = expanded_context[:-1]
-            logger.info(f"expanded_context={expanded_context}")
-            logger.info(f"queries={queries}")
+            # logger.debug(f"queries={queries}")
 
             # logger.debug("\n\n[START]\nqueries: " + str(queries))   # DEBUG
             query_batch.append(queries)
 
             model_expanded_context = self._expand_context(full_context, padding="pre", context_depth=self.model_context_depth)
+            # logger.debug(f"model_expanded_context={model_expanded_context}")
             # logger.debug("\nquery expand_context:" + str(model_expanded_context))
 
             # ### Trick: shift of 2 positions to the left ###
@@ -116,3 +117,70 @@ class ComposeInputsHybridRanker(Component):
                 sent_list[i] = ''  # erase context until the desired depth TODO: this is a trick
 
             return sent_list
+
+"""
+---for 
+"context_depth": 2,
+"model_context_depth": 2,
+"use_user_context_only": true,
+"use_context_for_query": false,
+
+utterances_histories has len +1 because it consists last utter
+
+---you can see:
+
+ranking_chitchat_2stage| 2020-03-04 11:54:23.660 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 55: expanded_context=['', '', '', '', '', '', '', '', 's2', 's2']
+ranking_chitchat_2stage| 2020-03-04 11:54:23.661 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 69: queries=['s2', '    s2']
+ranking_chitchat_2stage| 2020-03-04 11:54:23.661 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 75: model_expanded_context=['', '', '', '', '', '', '', '', 's2', 's2']
+ranking_chitchat_2stage| 2020-03-04 11:54:23 ('172.28.0.8', 54704) - "POST /model HTTP/1.1" 200
+ranking_chitchat_2stage| 2020-03-04 11:54:25.44 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 55: expanded_context=['', '', '', '', '', '', '', '', 's3', 's3']
+ranking_chitchat_2stage| 2020-03-04 11:54:25.44 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 69: queries=['s3', '    s3']
+ranking_chitchat_2stage| 2020-03-04 11:54:25.44 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 75: model_expanded_context=['', '', '', '', '', '', '', '', 's3', 's3']
+ranking_chitchat_2stage| 2020-03-04 11:54:25 ('172.28.0.8', 54704) - "POST /model HTTP/1.1" 200
+ranking_chitchat_2stage| 2020-03-04 11:54:26.901 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 55: expanded_context=['', '', '', '', '', '', '', '', 's4', 's4']
+ranking_chitchat_2stage| 2020-03-04 11:54:26.901 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 69: queries=['s4', '    s4']
+ranking_chitchat_2stage| 2020-03-04 11:54:26.902 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 75: model_expanded_context=['', '', '', '', '', '', '', '', 's4', 's4']
+ranking_chitchat_2stage| 2020-03-04 11:54:26 ('172.28.0.8', 54704) - "POST /model HTTP/1.1" 200
+ranking_chitchat_2stage| 2020-03-04 11:54:27.845 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 55: expanded_context=['', '', '', '', '', '', '', '', 's5', 's5']
+ranking_chitchat_2stage| 2020-03-04 11:54:27.845 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 69: queries=['s5', '    s5']
+ranking_chitchat_2stage| 2020-03-04 11:54:27.846 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 75: model_expanded_context=['', '', '', '', '', '', '', '', 's5', 's5']
+ranking_chitchat_2stage| 2020-03-04 11:54:27 ('172.28.0.8', 54704) - "POST /model HTTP/1.1" 200
+ranking_chitchat_2stage| 2020-03-04 11:54:28.849 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 55: expanded_context=['', '', '', '', '', '', '', '', 's6', 's6']
+ranking_chitchat_2stage| 2020-03-04 11:54:28.849 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 69: queries=['s6', '    s6']
+ranking_chitchat_2stage| 2020-03-04 11:54:28.850 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 75: model_expanded_context=['', '', '', '', '', '', '', '', 's6', 's6']
+
+
+
+---for 
+"context_depth": 4,
+"model_context_depth": 4,
+"use_user_context_only": true,
+"use_context_for_query": false,
+
+utterances_histories has len +1 because it consists last utter
+
+---you can see:
+
+ranking_chitchat_2stage| 2020-03-04 11:58:00.678 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 55: expanded_context=['', '', '', '', '', '', 's1', 'Sorry, something went wrong', 's2', 's2']
+ranking_chitchat_2stage| 2020-03-04 11:58:00.678 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 69: queries=['s1', 's2', '   s1 s2']
+ranking_chitchat_2stage| 2020-03-04 11:58:00.679 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 75: model_expanded_context=['', '', '', '', '', '', 's1', 'Sorry, something went wrong', 's2', 's2']
+ranking_chitchat_2stage| 2020-03-04 11:58:00 ('172.28.0.8', 54850) - "POST /model HTTP/1.1" 200
+ranking_chitchat_2stage| 2020-03-04 11:58:02.204 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 55: expanded_context=['', '', '', '', '', '', 's2', '---s2---', 's3', 's3']
+ranking_chitchat_2stage| 2020-03-04 11:58:02.204 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 69: queries=['s2', 's3', '   s2 s3']
+ranking_chitchat_2stage| 2020-03-04 11:58:02.205 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 75: model_expanded_context=['', '', '', '', '', '', 's2', '---s2---', 's3', 's3']
+ranking_chitchat_2stage| 2020-03-04 11:58:02 ('172.28.0.8', 54850) - "POST /model HTTP/1.1" 200
+ranking_chitchat_2stage| 2020-03-04 11:58:03.264 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 55: expanded_context=['', '', '', '', '', '', 's3', '---s3---', 's4', 's4']
+ranking_chitchat_2stage| 2020-03-04 11:58:03.264 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 69: queries=['s3', 's4', '   s3 s4']
+ranking_chitchat_2stage| 2020-03-04 11:58:03.264 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 75: model_expanded_context=['', '', '', '', '', '', 's3', '---s3---', 's4', 's4']
+ranking_chitchat_2stage| 2020-03-04 11:58:03 ('172.28.0.8', 54850) - "POST /model HTTP/1.1" 200
+ranking_chitchat_2stage| 2020-03-04 11:58:04.48 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 55: expanded_context=['', '', '', '', '', '', 's4', '---s4---', 's5', 's5']
+ranking_chitchat_2stage| 2020-03-04 11:58:04.48 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 69: queries=['s4', 's5', '   s4 s5']
+ranking_chitchat_2stage| 2020-03-04 11:58:04.48 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 75: model_expanded_context=['', '', '', '', '', '', 's4', '---s4---', 's5', 's5']
+ranking_chitchat_2stage| 2020-03-04 11:58:04 ('172.28.0.8', 54850) - "POST /model HTTP/1.1" 200
+ranking_chitchat_2stage| 2020-03-04 11:58:04.982 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 55: expanded_context=['', '', '', '', '', '', 's5', '---s5---', 's6', 's6']
+ranking_chitchat_2stage| 2020-03-04 11:58:04.982 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 69: queries=['s5', 's6', '   s5 s6']
+ranking_chitchat_2stage| 2020-03-04 11:58:04.982 DEBUG in 'deeppavlov.models.ranking.compose_inputs_hybrid_ranker'['compose_inputs_hybrid_ranker'] at line 75: model_expanded_context=['', '', '', '', '', '', 's5', '---s5---', 's6', 's6']
+
+
+
+"""
