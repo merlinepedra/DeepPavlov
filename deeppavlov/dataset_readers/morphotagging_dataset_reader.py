@@ -69,7 +69,7 @@ def read_infile(infile: Union[Path, str], *, from_words=False,
         fin = sys.stdin
     for line in fin:
         line = line.strip()
-        if line.startswith("#"):
+        if line.startswith("#") and not read_only_words:
             continue
         if line == "":
             if len(curr_word_sent) > 0:

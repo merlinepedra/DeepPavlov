@@ -102,6 +102,7 @@ class NNTrainer(FitTrainer):
                  validate_first: bool = True,
                  validation_patience: int = 5, val_every_n_epochs: int = -1, val_every_n_batches: int = -1,
                  log_every_n_batches: int = -1, log_every_n_epochs: int = -1, log_on_k_batches: int = 1,
+                 save_every_n_epochs: int = -1, save_every_n_batches: int = -1,
                  **kwargs) -> None:
         super().__init__(chainer_config, batch_size=batch_size, metrics=metrics, evaluation_targets=evaluation_targets,
                          show_examples=show_examples, tensorboard_log_dir=tensorboard_log_dir,
@@ -133,6 +134,8 @@ class NNTrainer(FitTrainer):
         self.log_every_n_epochs = log_every_n_epochs
         self.log_every_n_batches = log_every_n_batches
         self.log_on_k_batches = log_on_k_batches if log_on_k_batches >= 0 else None
+        self.save_every_n_epochs = save_every_n_epochs
+        self.save_every_n_batches = save_every_n_batches
 
         self.max_epochs = epochs
         self.epoch = start_epoch_num
@@ -296,6 +299,8 @@ class NNTrainer(FitTrainer):
                 if self.val_every_n_batches > 0 and self.train_batches_seen % self.val_every_n_batches == 0:
                     self._validate(iterator,
                                    tensorboard_tag='every_n_batches', tensorboard_index=self.train_batches_seen)
+                elif self.save_every_n_batches > 0 and self.train_batches_seen % self.save_every_n_batches == 0:
+                    self.save()
 
                 self._send_event(event_name='after_batch')
 
@@ -318,7 +323,8 @@ class NNTrainer(FitTrainer):
 
             if self.val_every_n_epochs > 0 and self.epoch % self.val_every_n_epochs == 0:
                 self._validate(iterator, tensorboard_tag='every_n_epochs', tensorboard_index=self.epoch)
-
+            elif self.save_every_n_epochs > 0 and self.epoch % self.save_every_n_epochs == 0:
+                self.save()
             self._send_event(event_name='after_epoch')
 
             if 0 < self.max_epochs <= self.epoch:

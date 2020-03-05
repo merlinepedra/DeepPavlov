@@ -101,7 +101,7 @@ def _are_equal_pos(first, second):
 IDLE_FEATURES = {"Voice", "Animacy", "Degree", "Mood", "VerbForm"}
 
 
-def get_tag_distance(first, second, first_sep=",", second_sep=" "):
+def get_tag_distance(first, second, first_sep=",", second_sep=" ", pos_cost=1):
     """
     Measures the distance between two (Russian) morphological tags in UD Format.
     The first tag is usually the one predicted by our model (therefore it uses comma
@@ -119,7 +119,7 @@ def get_tag_distance(first, second, first_sep=",", second_sep=" "):
     """
     first_pos, first_feats = make_pos_and_tag(first, sep=first_sep, return_mode="dict")
     second_pos, second_feats = make_pos_and_tag(second, sep=second_sep, return_mode="dict")
-    dist = int(not _are_equal_pos(first_pos, second_pos))
+    dist = int(not _are_equal_pos(first_pos, second_pos)) * pos_cost
     for key, value in first_feats.items():
         other = second_feats.get(key)
         if other is None:
@@ -131,29 +131,133 @@ def get_tag_distance(first, second, first_sep=",", second_sep=" "):
     return dist
 
 
-@register("morphorueval_tag_normalizer")
-class MorphoRuEvalTagNormalizer(Component):
+@register("hashtag_remover")
+class HashtagRemover(Component):
 
     def __init__(self, *args, **kwargs):
         pass
 
-    def _process(self, tag, lemma):
+    def _process(self, word):
+        if word[0] not in '#@' or len(word) == 1:
+            return word
+        return word[1:]
+
+    def __call__(self, batch):
+        return [[self._process(word) for word in sent] for sent in batch]
+
+
+@register("hashtag_adder")
+class HashtagAdder(Component):
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def _process(self, word, lemma):
+        if word[0] not in '#@' or len(word) == 1:
+            return lemma
+        return word[0] + lemma
+
+    def __call__(self, words, lemmas):
+        return [[self._process(*elem) for elem in zip(*sent)] for sent in zip(words, lemmas)]
+
+@register("morphorueval_tag_normalizer")
+class MorphoRuEvalTagNormalizer(Component):
+
+    def __init__(self, old=False, change_proper_nouns=False, *args, **kwargs):
+        self.old = old
+        pass
+
+    def _process(self, tag, lemma, word=None):
         pos, feats = make_pos_and_tag(tag, return_mode="dict")
+        if self.old:
+            if lemma == "прошлое":
+                pos = "ADJ"
+            if word in ["г.", "т.", "х."]:
+                feats["Abbr"] = "Yes"
+                if word == "т.":
+                    pos = "DET"
+                else:
+                    pos = "NOUN"
+            elif word.endswith(".") and len(word) >= 2 and word[:-1].isalpha():
+                pos = "NOUN"
+                feats["Abbr"] = "Yes"
         # краткие прилагательные
         if "Variant" in feats and feats["Variant"] == "Short":
             feats["Case"] = "Nom"
         # залог у "быть"
         if lemma == "быть" and pos == "AUX":
             feats.pop("Voice", None)
+        # медиальный залог
+        if pos == "VERB" and feats.get("VerbForm") != "Part" and feats.get("Voice") == "Pass":
+            feats["Voice"] = "Mid"
         # частицы
         if pos == "PART" and lemma in ["не", "ни"]:
             feats["Polarity"] = "Neg"
         # местоимения
         if lemma in ["себя", "себе"]:
             feats["Reflex"] = "Yes"
+        # иностранные слова
+        if pos == "PROPN" and all("a"<= x <= "z" or x == "-" for x in lemma.lower()):
+            pos = "X"
+        # наречия
+        if lemma == "надо" and pos == "ADV":
+            pos = "VERB"
+        # 17 век
+        if self.old:
+            if feats.get("Case", None) != "Acc":
+                feats.pop("Animacy", None)
+            # if "VerbForm" in feats and feats["VerbForm"] == "Inf":
+            #     feats.pop("Voice", None)
+            if pos in ["ADJ"] and "Variant" not in feats:
+                feats["Variant"] = "Long"
+            if pos == "VERB" and feats.get("VerbForm") == "Part" and "Variant" not in feats:
+                feats["Variant"] = "Long"
+            if pos == "PRON":
+                if lemma in ["он", "я", "она", "ты", "мы", "они"]:
+                    feats["PronType"] = "Prs"
+                elif word == "тебѣ":
+                    feats["PronType"] = "Prs"
+                elif lemma in ["кто", "который"]:
+                    feats["PronType"] = "Rel"
+            if pos in ["PRON", "DET"]:
+                if lemma == "твой":
+                    feats.pop("Variant", None)
+                    feats["PronType"] = "Prs"
+                if word in ["тѣхъ", "техъ", "сей"] or lemma in ["тѣхъ", "техъ", "тот"]:
+                    feats["PronType"] = "Dem"
+            if pos == "VERB":
+                if feats.get("VerbForm") == "Conv":
+                    feats.pop("Aspect", None)
+                if feats.get("Tense") == "Past" and feats.get("VerbForm") == "Fin":
+                    feats["VerbForm"] = "PartRes"
+                    feats.pop("Mood", None)
+                if word.endswith("ся"):
+                    feats["Reflex"] = "Yes"
+            if word == "великихъ":
+                feats["Gender"] = "Masc"
+            if lemma == "как":
+                feats["Degree"] = "Pos"
+            if lemma in ["той", "то"]:
+                feats["Gender"], feats["PronType"] = "Fem", "Dem"
+            if lemma in ["который", "такой"]:
+                feats["PronType"] = "Int"
+            if lemma in ["никакой"]:
+                feats["PronType"] = "Neg"
+            if lemma in ["сей"]:
+                pos, feats["PronType"] = "DET", "Dem"
+            if word in ["тово"]:
+                pos, feats["PronType"] = "DET", "Dem"
+            if lemma == "весь":
+                feats["PronType"] = "Tot"
+            if lemma == "денг":
+                feats["Gender"] = "Fem"
+            if lemma == "они":
+                feats["Gender"] = "Masc"
         tag = make_full_UD_tag(pos, feats, mode="dict")
         return tag
 
-    def __call__(self, batch, lemmas):
-        return [[self._process(*elem) for elem in zip(tag_sent, lemmas_sent)]
-                for tag_sent, lemmas_sent in zip(batch, lemmas)]
+    def __call__(self, batch, lemmas, words=None):
+        if words is None:
+            words = [[None] * len(sent) for sent in lemmas]
+        return [[self._process(*elem) for elem in zip(tag_sent, lemmas_sent, words_sent)]
+                for tag_sent, lemmas_sent, words_sent in zip(batch, lemmas, words)]

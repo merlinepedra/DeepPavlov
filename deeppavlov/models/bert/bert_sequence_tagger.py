@@ -492,6 +492,7 @@ class BertSequenceTagger(BertSequenceNetwork):
                  ema_decay: float = None,
                  ema_variables_on_cpu: bool = True,
                  return_probas: bool = False,
+                 idle_tags_number=0,
                  freeze_embeddings: bool = False,
                  learning_rate: float = 1e-3,
                  bert_learning_rate: float = 2e-5,
@@ -507,6 +508,7 @@ class BertSequenceTagger(BertSequenceNetwork):
         self.birnn_cell_type = birnn_cell_type
         self.birnn_hidden_size = birnn_hidden_size
         self.return_probas = return_probas
+        self.idle_tags_number = idle_tags_number
         super().__init__(keep_prob=keep_prob,
                          bert_config_file=bert_config_file,
                          pretrained_bert=pretrained_bert,
@@ -622,8 +624,10 @@ class BertSequenceTagger(BertSequenceNetwork):
             if self.use_crf:
                 pred = self._decode_crf(feed_dict)
             else:
-                pred, seq_lengths = self.sess.run([self.y_predictions, self.seq_lengths], feed_dict=feed_dict)
+                pred, seq_lengths = self.sess.run([self.y_probas, self.seq_lengths], feed_dict=feed_dict)
+                pred[:,:,:self.idle_tags_number] = 0.0
                 pred = [p[:l] for l, p in zip(seq_lengths, pred)]
+                pred = [np.argmax(elem, axis=-1) for elem in pred]
         else:
             pred = self.sess.run(self.y_probas, feed_dict=feed_dict)
         return pred
