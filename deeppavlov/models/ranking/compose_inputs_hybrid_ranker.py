@@ -30,7 +30,7 @@ class ComposeInputsHybridRanker(Component):
                  num_context_turns: int = 10,
                  use_context_for_query: bool = False,
                  use_user_context_only: bool = False,
-                 history_includes_last_utterance: Optional[bool] = False,
+                 history_includes_last_utterance: Optional[bool] = True,
                  **kwargs):
         self.query_context_depth = context_depth
         self.model_context_depth = model_context_depth
@@ -61,9 +61,9 @@ class ComposeInputsHybridRanker(Component):
                 queries.append(" ".join(expanded_context))
             elif self.use_user_context_for_query:
                 queries = []
-                for i in expanded_context[::-1][1::2][::-1]:
+                for i in expanded_context[::-1][::2][::-1]:
                     if len(i) > 0: queries.append(i)
-                queries.append(" ".join(expanded_context[::-1][1::2][::-1]))
+                queries.append(" ".join(expanded_context[::-1][::2]).strip())
             else:
                 queries = expanded_context[:-1]
             # logger.debug(f"queries={queries}")
