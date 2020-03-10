@@ -28,12 +28,12 @@ logger = getLogger(__name__)
 class RetrieveCandidates(Component):
 
     def __init__(self,
-                 num_context_tuns: int = 10,
+                 num_context_turns: int = 10,
                  map_filename: str = None,
                  **kwargs):
         map_filename = expand_path(map_filename)
         self.map = pickle.load(open(map_filename, 'rb'))
-        self.num_context_turns = num_context_tuns
+        self.num_context_turns = num_context_turns
 
 
     def __call__(self, context_batch, index_batch, scores_batch):
