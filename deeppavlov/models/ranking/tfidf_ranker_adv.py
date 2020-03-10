@@ -16,6 +16,7 @@ from logging import getLogger
 from typing import List, Any, Tuple
 
 import numpy as np
+from sklearn.preprocessing import normalize
 
 from deeppavlov.core.common.registry import register
 from deeppavlov.core.models.estimator import Component
@@ -42,6 +43,7 @@ class TfidfRankerAdv(Component):
         self.max_n = max_n
         self.top_n = top_n
         self.vectorizer = vectorizer
+        self.vectorizer_normalized = normalize(vectorizer.tfidf_matrix)
         self.active = active
 
 
@@ -56,7 +58,7 @@ class TfidfRankerAdv(Component):
         for batch_q in batch_questions:
 
             # logger.debug("batch_q: " + str(batch_q))
-            q_tfidfs = self.vectorizer(batch_q)
+            q_tfidfs = normalize(self.vectorizer(batch_q))
 
             doc_scores = []
             doc_ids = []
@@ -69,7 +71,7 @@ class TfidfRankerAdv(Component):
                 top_n = max_n[j]
                 # logger.debug("vector: " + str(q_tfidf))
 
-                scores = q_tfidf * self.vectorizer.tfidf_matrix
+                scores = q_tfidf * self.vectorizer_normalized
                 scores = np.squeeze(
                     scores.toarray() + 0.0001)  # add a small value to eliminate zero scores
 
