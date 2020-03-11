@@ -26,15 +26,11 @@ logger = getLogger(__name__)
 
 @register("retrieve_candidates")
 class RetrieveCandidates(Component):
-
-    def __init__(self,
-                 num_context_turns: int = 10,
-                 map_filename: str = None,
-                 **kwargs):
+    def __init__(self, num_context_turns: int = 10, map_filename: str = None, trash_hold: float = 0.0, **kwargs):
         map_filename = expand_path(map_filename)
-        self.map = pickle.load(open(map_filename, 'rb'))
+        self.map = pickle.load(open(map_filename, "rb"))
         self.num_context_turns = num_context_turns
-
+        self.trash_hold = trash_hold
 
     def __call__(self, context_batch, index_batch, scores_batch):
         """
@@ -47,12 +43,20 @@ class RetrieveCandidates(Component):
 
         candidates_batch = []  # batch of list of candidates
         for idx, index in enumerate(index_batch):
-            ids = [int(i.split('.')[0]) for i in index]
-            candidates = [self.map[id][1] for id in ids]
+            ids = [int(i.split(".")[0]) for i in index]
+            candidates = [self.map[id][1] for kk, id in enumerate(ids) if scores_batch[idx][kk] >= self.trash_hold]
+            logger.debug(
+                [
+                    (self.map[id][1], scores_batch[idx][kk])
+                    for kk, id in enumerate(ids)
+                    if scores_batch[idx][kk] >= self.trash_hold
+                ]
+            )
+            # candidates = candidates if candidates else [self.map[id][1] for id in ids]
 
-            candidates2 = [(kk, self.map[id][1]) for kk,id in enumerate(ids)]
-            contexts = [(kk, self.map[id][0]) for kk,id in enumerate(ids)]
-            scores = [(kk,"{:.2f}".format(j)) for kk,j in enumerate(scores_batch[idx])]
+            # candidates2 = [(kk, self.map[id][1]) for kk,id in enumerate(ids)]
+            # contexts = [(kk, self.map[id][0]) for kk,id in enumerate(ids)]
+            # scores = [(kk,"{:.2f}".format(j)) for kk,j in enumerate(scores_batch[idx])]
             # logger.debug("[tf-idf] len docs: " + str(len(candidates)))
             # logger.debug("[tf-idf] \nscores:" + str(scores[:50]) + "\ncontext:" + str(contexts[:50]) + "\nresponses:" + str(candidates2[:50]))  # DEBUG
 
@@ -62,8 +66,9 @@ class RetrieveCandidates(Component):
         for i in range(len(context_batch)):
             # HACK: check invalid input string (when tf-idf score are zeros)
             if all(np.asarray(scores_batch[i]) == 0.0001):
-                context_batch[i] = [''] * (self.num_context_turns - 1) +\
-                                   ['Давай подумаем над этим вместе, я пока не на все вопросы умею отвечать.']
+                context_batch[i] = [""] * (self.num_context_turns - 1) + [
+                    "Давай подумаем над этим вместе, я пока не на все вопросы умею отвечать."
+                ]
 
             item = context_batch[i]
             item.extend(candidates_batch[i])  # append several response candidates to the each context
