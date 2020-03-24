@@ -22,14 +22,11 @@
   "bert_sep_ranker_predictor": "deeppavlov.models.bert.bert_ranker:BertSepRankerPredictor",
   "bert_sep_ranker_predictor_preprocessor": "deeppavlov.models.preprocessors.bert_preprocessor:BertSepRankerPredictorPreprocessor",
   "bert_sep_ranker_preprocessor": "deeppavlov.models.preprocessors.bert_preprocessor:BertSepRankerPreprocessor",
-<<<<<<< HEAD
   "elmo_bilm": "deeppavlov.models.bidirectional_lms.elmo_bilm:ELMoEmbedder",
   "elmo_probability_predictor": "deeppavlov.models.bidirectional_lms.elmo_bilm:ELMoWordProbabilityPredictor",
-=======
   "bert_sequence_network": "deeppavlov.models.bert.bert_sequence_tagger:BertSequenceNetwork",
   "bert_sequence_tagger": "deeppavlov.models.bert.bert_sequence_tagger:BertSequenceTagger",
   "bert_syntax_parser": "deeppavlov.models.syntax_parser.network:BertSyntaxParser",
->>>>>>> dev
   "bilstm_gru_nn": "deeppavlov.models.ranking.bilstm_gru_siamese_network:BiLSTMGRUSiameseNetwork",
   "bilstm_nn": "deeppavlov.models.ranking.bilstm_siamese_network:BiLSTMSiameseNetwork",
   "bow": "deeppavlov.models.embedders.bow_embedder:BoWEmbedder",
