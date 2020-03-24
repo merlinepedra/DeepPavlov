@@ -37,6 +37,7 @@ def read_infile(infile: Union[Path, str], *, from_words=False,
                 word_column: int = WORD_COLUMN, pos_column: int = POS_COLUMN,
                 tag_column: int = TAG_COLUMN, head_column: int = HEAD_COLUMN,
                 dep_column: int = DEP_COLUMN, max_sents: int = -1,
+                max_sent_length: int = sys.maxsize,
                 read_only_words: bool = False, read_syntax: bool = False) -> List[Tuple[List, Union[List, None]]]:
     """Reads input file in CONLL-U format
 
@@ -72,7 +73,7 @@ def read_infile(infile: Union[Path, str], *, from_words=False,
         if line.startswith("#") and not read_only_words:
             continue
         if line == "":
-            if len(curr_word_sent) > 0:
+            if len(curr_word_sent) > 0 and len(curr_word_sent) < max_sent_length:
                 if read_only_words:
                     curr_tag_sent = None
                 elif read_syntax:
@@ -95,7 +96,7 @@ def read_infile(infile: Union[Path, str], *, from_words=False,
             if read_syntax:
                 curr_head_sent.append(int(splitted[head_column]))
                 curr_dep_sent.append(splitted[dep_column])
-    if len(curr_word_sent) > 0:
+    if len(curr_word_sent) > 0 and len(curr_word_sent) < max_sent_length:
         if read_only_words:
             curr_tag_sent = None
         elif read_syntax:
@@ -178,11 +179,11 @@ class MorphotaggerDatasetReader(DatasetReader):
             dir_path.mkdir(exist_ok=True, parents=True)
             download_decompress(url, dir_path)
             mark_done(dir_path)
-        data = {}
+        data = {"train": [], "valid": [], "test": []}
         for mode, filepath in zip(data_types, data_path):
             if mode == "dev":
                 mode = "valid"
 #             if mode == "test":
 #                 kwargs["read_only_words"] = True
-            data[mode] = read_infile(filepath, **kwargs)
+            data[mode] += read_infile(filepath, **kwargs)
         return data

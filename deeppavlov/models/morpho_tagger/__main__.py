@@ -23,3 +23,4 @@ if __name__ == "__main__":
                                 batch_size=args.batch_size, output_format=args.output_format)
     for elem in answer:
         print(elem)
+        print("")
