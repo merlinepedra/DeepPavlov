@@ -54,7 +54,7 @@ class HybridRankerPredictor(Component):
         logger.error(f"ext_score_flag: {ext_score_flag}")
 
         for i in range(len(candidates_batch)):
-            cand2pred = {candidates_batch[i][j]: preds_batch[i][j] for j in range(len(candidates_batch[i]))}
+            cand2pred = {candidates_batch[i][j]: preds_batch[i][j][-1] for j in range(len(candidates_batch[i]))}
 
             if ext_score_flag:
                 logger.error(f"candidates_batch[i]: {[ f'{i}: {n}'for i, n in enumerate(candidates_batch[i])]}")

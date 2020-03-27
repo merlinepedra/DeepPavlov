@@ -98,7 +98,7 @@ class BertRankerModel(BertClassifierModel):
                 pred = self.sess.run(self.y_predictions, feed_dict=feed_dict)
             else:
                 pred = self.sess.run(self.y_probas, feed_dict=feed_dict)
-            predictions.append(pred[:, 1])
+            predictions.append(pred)
         if len(features_li) == 1:
             predictions = predictions[0]
         else:

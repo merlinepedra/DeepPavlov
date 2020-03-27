@@ -69,7 +69,7 @@ class RetrieveCandidates(Component):
                     "Давай подумаем над этим вместе, я пока не на все вопросы умею отвечать."
                 ]
 
-            item = context_batch[i]
+            item = [" ".join(context_batch[i]).strip()]
             item.extend(candidates_batch[i])  # append several response candidates to the each context
             model_inputs.append(item)
 
