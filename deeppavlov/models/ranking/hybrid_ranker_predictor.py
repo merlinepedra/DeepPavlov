@@ -29,14 +29,22 @@ class HybridRankerPredictor(Component):
         lambda_coeff: float = 10.0,
         return_topn: bool = False,
         topn: int = 10,
-        ext_score_trashhold: float = 0.0,
+        ext_score_threshold: float = 0.0,
+        confidence_tfidf_threshold: float = 0.0,
+        confidence_bert_threshold: float = 0.0,
+        tfidf_ranker_list: list = [],
+        last_utterance_idx: int = 1,
         **kwargs,
     ):
         self.sample_size = sample_size
         self.lambda_coeff = lambda_coeff
         self.return_topn = return_topn
         self.topn = topn
-        self.ext_score_trashhold = ext_score_trashhold
+        self.ext_score_threshold = ext_score_threshold
+        self.confidence_tfidf_threshold = confidence_tfidf_threshold
+        self.confidence_bert_threshold = confidence_bert_threshold
+        self.tfidf_ranker_list = tfidf_ranker_list
+        self.last_utterance_idx = last_utterance_idx
 
     def __call__(self, candidates_batch, preds_batch, ext_score_batch=[]):
         """
@@ -51,9 +59,26 @@ class HybridRankerPredictor(Component):
                 for cand_dim, ext_feat_dim in zip(np.array(candidates_batch), np.array(ext_score_batch))
             ]
         )
-        logger.error(f"ext_score_flag: {ext_score_flag}")
+
+        logger.error(f"preds_batch: {[ f'{i}: {n}'for i, n in enumerate(preds_batch[0])]}")
 
         for i in range(len(candidates_batch)):
+
+            if self.confidence_tfidf_threshold and len(self.tfidf_ranker_list):
+                s, f = sum(self.tfidf_ranker_list[:self.last_utterance_idx]), self.tfidf_ranker_list[self.last_utterance_idx]
+                confident_candidates = [(cand, ext_score) for cand, ext_score in zip(candidates_batch[i][s:f], ext_score_batch[i][s:f])
+                        if ext_score > self.confidence_tfidf_threshold]
+                if len(confident_candidates):
+                    confident_responses = [candidate[0] for candidate in confident_candidates]
+                    confident_scores = [candidate[1] for candidate in confident_candidates]
+                    responses_batch.append(confident_responses)
+                    responses_preds.append(confident_scores)
+
+                    logger.debug('sorted scores: ' + str(confident_responses))
+                    logger.debug('sorted answers: ' + str(confident_scores))
+
+                    break
+
             cand2pred = {candidates_batch[i][j]: preds_batch[i][j][-1] for j in range(len(candidates_batch[i]))}
 
             if ext_score_flag:
@@ -62,7 +87,7 @@ class HybridRankerPredictor(Component):
                 candidates_list = [
                     cand
                     for cand, ext_score in zip(candidates_batch[i], ext_score_batch[i])
-                    if ext_score > self.ext_score_trashhold
+                    if ext_score > self.ext_score_threshold
                 ]
                 logger.error(f"candidates_list: {[ f'{i}: {n}'for i, n in enumerate(candidates_list)]}")
                 candidates_list = list(set(candidates_list))
@@ -94,8 +119,12 @@ class HybridRankerPredictor(Component):
                 responses_batch.append(candidates_list[chosen_index])
                 responses_preds.append(scores[chosen_index])
             else:
-                responses_batch.append(np.array(candidates_list)[sorted_ids[: self.topn]])
-                responses_preds.append(scores[sorted_ids[: self.topn]])
-                # logger.debug('sorted scores: ' + str(scores[sorted_ids[:self.topn]]))
+                sorted_scores = scores[sorted_ids[:self.topn]]
+                candidate_scores = [score for score in sorted_scores if score > self.confidence_bert_threshold]
+                responses_batch.append(np.array(candidates_list)[sorted_ids[:self.topn]][:len(candidate_scores)])
+                responses_preds.append(candidate_scores)
+
+                logger.debug('sorted scores: ' + str(scores[sorted_ids[:self.topn]]))
+                logger.debug('sorted answers: ' + str(np.array(candidates_list)[sorted_ids[: self.topn]]))
 
         return responses_batch, responses_preds
