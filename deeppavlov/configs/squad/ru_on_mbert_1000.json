@@ -8,7 +8,7 @@
   "dataset_iterator": {
     "class_name": "squad_iterator",
     "seed": 1337,
-    "port": 1000,
+    "port": 0,
     "shuffle": true
   },
   "chainer": {
