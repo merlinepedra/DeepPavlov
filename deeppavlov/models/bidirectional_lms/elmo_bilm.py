@@ -297,12 +297,17 @@ def my_softmax(x, axis=-1):
 @register('elmo_probability_predictor')
 class ELMoWordProbabilityPredictor(ELMoEmbedder):
 
-    def __init__(self, unk_mult=1e-4, **kwargs):
+    def __init__(self, unk_mult=1e-4, reduce_unk_prob=True, **kwargs):
         super().__init__(output_layer="lstm", **kwargs)
         self.unk_mult = unk_mult
+        self.reduce_unk_prob = reduce_unk_prob
         self.vocab = self.get_vocab()
         self.inverse_vocab = {word: i for i, word in enumerate(self.vocab)}
-        self.softmax_b[self.inverse_vocab["<UNK>"]] += np.log(self.unk_mult)
+        self.softmax_b[self.unk_index] += np.log(self.unk_mult)
+
+    @property
+    def unk_index(self):
+        return self.inverse_vocab["<UNK>"] if getattr(self, "inverse_vocab", None) else 2
 
     def _load(self):
         model, sess, init_states, batcher, options = super()._load()
@@ -326,14 +331,18 @@ class ELMoWordProbabilityPredictor(ELMoEmbedder):
             for i, ((left_state, right_state), candidates) in enumerate(zip(state_sent, candidate_sent)):
                 if len(candidates) == 0:
                     continue
-                elif len(candidates) == 1:
-                    curr_answer[i] = np.ones(dtype=float, shape=(2, 1))
-                    continue
-                candidate_indexes = [self.inverse_vocab.get(word, self.inverse_vocab["<UNK>"]) for word in candidates]
+                else:
+                    if len(candidates) == 1:
+                        curr_answer[i] = np.ones(dtype=float, shape=(2, 1))
+                        continue
+                candidate_indexes = np.array([self.inverse_vocab.get(word, self.unk_index) for word in candidates])
                 candidate_embeddings = self.softmax_W[candidate_indexes]
                 candidate_biases = self.softmax_b[candidate_indexes]
                 left_logits = np.dot(left_state, candidate_embeddings.T) + candidate_biases
                 right_logits = np.dot(right_state, candidate_embeddings.T) + candidate_biases
+                if self.reduce_unk_prob:
+                    left_logits[np.where(candidate_indexes==self.unk_index)[0]] = np.min(left_logits)
+                    right_logits[np.where(candidate_indexes==self.unk_index)[0]] = np.min(right_logits)
                 curr_answer[i] = softmax([left_logits, right_logits])
             answer.append(curr_answer)
         return answer
