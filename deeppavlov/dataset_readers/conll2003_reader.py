@@ -1,3 +1,4 @@
+import sys
 from logging import getLogger
 from pathlib import Path
 from typing import Union, List
@@ -19,24 +20,27 @@ class BasicNerReader(DatasetReader):
         self.provide_pos = provide_pos
         self.provide_doc_ids = provide_doc_ids
         self.iob = iob
+        # self.sep = sep
+        # self.max_length = max_length or sys.maxsize
         self.docstart_token = docstart_token
         self.num_docs = 0
         self.x_is_tuple = self.provide_pos or self.provide_doc_ids
         super(BasicNerReader, self).__init__(*args, **kwargs)
 
     def read(self, data_path: List[Union[str, Path]],
-             data_types: List[str], **kwargs):
+             data_types: List[str], sep: str = None, 
+             max_length=None, **kwargs):
         if len(data_path) != len(data_types):
             raise ValueError("There must be equal number of data types and input files")
         answer = {"train": [], "valid": [], "test": []}    
         for key, infile in zip(data_types, data_path):
             if key == "dev":
                 key = "valid"
-            answer[key] += self.parse_ner_file(infile)
+            answer[key] += self.parse_ner_file(infile, sep=sep, max_length=max_length)
         return answer
-            
 
-    def parse_ner_file(self, file_name: Union[str, Path]):
+    def parse_ner_file(self, file_name: Union[str, Path], sep=None, max_length=None):
+        max_length = max_length or sys.maxsize
         if isinstance(file_name, str):
             file_name = Path(file_name)
         samples = []
@@ -49,12 +53,13 @@ class BasicNerReader(DatasetReader):
                 # Check end of the document
                 if 'DOCSTART' in line:
                     if len(tokens) > 1:
-                        x = tokens if not self.x_is_tuple else (tokens,)
-                        if self.provide_pos:
-                            x = x + (pos_tags,)
-                        if self.provide_doc_ids:
-                            x = x + (self.num_docs,)
-                        samples.append((x, tags))
+                        if len(tokens) <= max_length:
+                            x = tokens if not self.x_is_tuple else (tokens,)
+                            if self.provide_pos:
+                                x = x + (pos_tags,)
+                            if self.provide_doc_ids:
+                                x = x + (self.num_docs,)
+                            samples.append((x, tags))
                         tokens = []
                         pos_tags = []
                         tags = []
@@ -65,34 +70,35 @@ class BasicNerReader(DatasetReader):
                         tags = ['O']
                 elif len(line) < 2:
                     if (len(tokens) > 0) and (tokens != [self.docstart_token]):
-                        x = tokens if not self.x_is_tuple else (tokens,)
-                        if self.provide_pos:
-                            x = x + (pos_tags,)
-                        if self.provide_doc_ids:
-                            x = x + (self.num_docs,)
-                        samples.append((x, tags))
+                        if len(tokens) <= max_length:
+                            x = tokens if not self.x_is_tuple else (tokens,)
+                            if self.provide_pos:
+                                x = x + (pos_tags,)
+                            if self.provide_doc_ids:
+                                x = x + (self.num_docs,)
+                            samples.append((x, tags))
                         tokens = []
                         pos_tags = []
                         tags = []
                 else:
                     if self.provide_pos:
                         try:
-                            token, pos, *_, tag = line.split("\t")
+                            token, pos, *_, tag = line.split(sep)
                             pos_tags.append(pos)
                         except:
-                            log.warning('Skip {}, splitted as {}'.format(repr(line), repr(line.split())))
+                            log.warning('Skip {}, splitted as {}'.format(repr(line), repr(line.split(sep))))
                             continue
                     else:
                         try:
-                            token, *_, tag = line.split("\t")
+                            token, *_, tag = line.split(sep)
                         except:
-                            log.warning('Skip {}, splitted as {}'.format(repr(line), repr(line.split())))
+                            log.warning('Skip {}, splitted as {}'.format(repr(line), repr(line.split(sep))))
                             continue
 
                     tags.append(tag)
                     tokens.append(token)
 
-            if tokens:
+            if tokens and len(tokens) <= max_length:
                 x = tokens if not self.x_is_tuple else (tokens,)
                 if self.provide_pos:
                     x = x + (pos_tags,)

@@ -3,6 +3,7 @@
     "class_name": "conll2003_reader",
     "data_path": "{DOWNLOADS_PATH}/total_rus/",
     "dataset_name": "collection_rus",
+    "max_length": 150,
     "provide_pos": false
   },
   "dataset_iterator": {
