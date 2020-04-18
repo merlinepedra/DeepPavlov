@@ -11,282 +11,139 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import itertools
-import pickle
+
 from logging import getLogger
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 
 import nltk
 import pymorphy2
-from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
+import sqlite3
 
 from deeppavlov.core.common.registry import register
 from deeppavlov.core.models.component import Component
 from deeppavlov.core.models.serializable import Serializable
 from deeppavlov.models.spelling_correction.levenshtein.levenshtein_searcher import LevenshteinSearcher
+from deeppavlov.models.kbqa.wiki_parser import WikiParser
 
 log = getLogger(__name__)
 
 
 @register('entity_linker')
-class EntityLinker(Component, Serializable):
-    """
-        This class extracts from Wikidata candidate entities for the entity mentioned in the question and then extracts
-        triplets from Wikidata for the extracted entity. Candidate entities are searched in the dictionary where keys
-        are titles and aliases of Wikidata entities and values are lists of tuples (entity_title, entity_id,
-        number_of_relations). First candidate entities are searched in the dictionary by keys where the keys are
-        entities extracted from the question, if nothing is found entities are searched in the dictionary using
-        Levenstein distance between the entity and keys (titles) in the dictionary.
-    """
-
-    LANGUAGES = {'rus'}
-
-    def __init__(self, load_path: str, wiki_filename: str, entities_filename: str, inverted_index_filename: str,
-                 id_to_name_file: str, lemmatize: bool = True, debug: bool = False, rule_filter_entities: bool = True,
-                 use_inverted_index: bool = True, language: str = 'rus', *args, **kwargs) -> None:
-        """
-
-        Args:
-            load_path: path to folder with wikidata files
-            wiki_filename: file with Wikidata triplets
-            entities_filename: file with dict of entity titles (keys) and entity ids (values)
-            inverted_index_filename: file with dict of words (keys) and entities containing these words (values)
-            id_to_name_file: file with dict of entity ids (keys) and entities names and aliases (values)
-            lemmatize: whether to lemmatize tokens of extracted entity
-            debug: whether to print entities extracted from Wikidata
-            rule_filter_entities: whether to filter entities which do not fit the question
-            use_inverted_index: whether to use inverted index for entity linking
-            language - the language of the linker (used for filtration of some questions to improve overall performance)
-            *args:
-            **kwargs:
-        """
+class EntityLinker(Component):
+    def __init__(self, load_path: str,
+                 inverted_index_doc_table: Optional[str] = None,
+                 entities_list_doc_table: Optional[str] = None,
+                 inverted_index_table: str,
+                 entities_list_table: str,
+                 lemmatize: bool = False,
+                 use_prefix_tree: bool = False,
+                 link_with_docs: bool = False,
+                 **kwargs) -> None:
+        
         super().__init__(save_path=None, load_path=load_path)
         self.morph = pymorphy2.MorphAnalyzer()
         self.lemmatize = lemmatize
-        self.debug = debug
-        self.rule_filter_entities = rule_filter_entities
-        self.use_inverted_index = use_inverted_index
-        self._language = language
-        if language not in self.LANGUAGES:
-            log.warning(f'EntityLinker supports only the following languages: {self.LANGUAGES}')
+        self.use_prefix_tree = use_prefix_tree
+        self.link_with_docs = link_with_docs
+        self.what_to_link = "entities"
+        
+        self.conn = sqlite3.conn(load_path)
+        self.cursor = self.conn.cursor()
 
-        self._wiki_filename = wiki_filename
-        self._entities_filename = entities_filename
-        self.inverted_index_filename = inverted_index_filename
-        self.id_to_name_file = id_to_name_file
+        if self.link_with_docs:
+            self.inverted_index_doc_table = inverted_index_doc_table
+            self.entities_list_doc_table = entities_list_doc_table
+        self.inverted_index_table = inverted_index_table
+        self.entities_list_table = entities_list_table
 
-        self.name_to_q: Optional[Dict[str, List[Tuple[str]]]] = None
-        self.wikidata: Optional[Dict[str, List[List[str]]]] = None
-        self.inverted_index: Optional[Dict[str, List[Tuple[str]]]] = None
-        self.id_to_name: Optional[Dict[str, Dict[List[str]]]] = None
-        self.load()
-        if self.use_inverted_index:
-            alphabet = "abcdefghijklmnopqrstuvwxyzабвгдеёжзийклмнопрстуфхцчшщъыьэюя1234567890-_()=+!?.,/;:&@<>|#$%^*"
+        if self.use_prefix_tree:
+            alphabet = "!#%\&'()+,-./0123456789:;?ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz½¿ÁÄ" + \
+                       "ÅÆÇÉÎÓÖ×ÚßàáâãäåæçèéêëíîïðñòóôöøùúûüýāăąćČčĐėęěĞğĩīİıŁłńňŌōőřŚśşŠšťũūůŵźŻżŽžơưșȚțəʻ" + \
+                       "ʿΠΡβγБМавдежикмностъяḤḥṇṬṭầếờợ–‘’Ⅲ−∗"
             dictionary_words = list(self.inverted_index.keys())
             self.searcher = LevenshteinSearcher(alphabet, dictionary_words)
 
-    def load(self) -> None:
-        if self.use_inverted_index:
-            with open(self.load_path / self.inverted_index_filename, 'rb') as inv:
-                self.inverted_index = pickle.load(inv)
-                self.inverted_index: Dict[str, List[Tuple[str]]]
-            with open(self.load_path / self.id_to_name_file, 'rb') as i2n:
-                self.id_to_name = pickle.load(i2n)
-                self.id_to_name: Dict[str, Dict[List[str]]]
+    def __call__(self, entities_batch: str) -> Tuple[List[str], List[float]]:
+        self.what_to_link = "entities"
+        entity_ids_batch = []
+        entity_confidences_batch = []
+        for entities in entities_batch:
+            entity_ids_list, confidences_list = self.link_entities(entities)
+            entity_ids_batch.append(entity_ids_list)
+            entity_confidences_batch.append(confidences_list)
+        if self.link_with_docs:
+            self.what_to_link = "docs"
+            doc_ids_batch = []
+            doc_confidences_batch = []
+            for entities in entities_batch:
+                doc_ids_list, confidences_list = self.link_entities(entities)
+                doc_ids_batch.append(doc_ids_list)
+                doc_confidences_batch.append(confidences_list)
+            return entity_ids_batch, entity_confidences_batch, doc_ids_batch, doc_confidences_batch
+
         else:
-            with open(self.load_path / self._entities_filename, 'rb') as e:
-                self.name_to_q = pickle.load(e)
-                self.name_to_q: Dict[str, List[Tuple[str]]]
-        with open(self.load_path / self._wiki_filename, 'rb') as w:
-            self.wikidata = pickle.load(w)
-            self.wikidata: Dict[str, List[List[str]]]
+            return entity_ids_batch, entity_confidences_batch
 
-    def save(self) -> None:
-        pass
+    def link_entities(self, entities: List[str]):
+        entity_ids_list = []
+        confidences_list = []
+        for entity in entities:
+            candidate_entities = self.candidate_entities_inverted_index(entity)
+            entity_ids, confidences = self.sort_found_entities(candidate_entities, entity)
+            entity_ids_list.append(entity_ids)
+            confidences_list.append(confidences)
+        return entity_ids_list, confidences_list
 
-    def __call__(self, entity: str, question_tokens: List[str]) -> Tuple[List[List[List[str]]], List[str]]:
-        confidences = []
-        srtd_cand_ent = []
-        if not entity:
-            wiki_entities = ['None']
-        else:
-            if self.use_inverted_index:
-                candidate_entities = self.candidate_entities_inverted_index(entity)
-                candidate_names = self.candidate_entities_names(candidate_entities)
-                wiki_entities, confidences, srtd_cand_ent = self.sort_found_entities(candidate_entities,
-                                                                                     candidate_names, entity)
-            else:
-                candidate_entities = self.find_candidate_entities(entity)
-
-                srtd_cand_ent = sorted(candidate_entities, key=lambda x: x[2], reverse=True)
-                if len(srtd_cand_ent) > 0:
-                    wiki_entities = [ent[1] for ent in srtd_cand_ent]
-                    confidences = [1.0 for i in range(len(srtd_cand_ent))]
-                    srtd_cand_ent = [(ent[0], ent[1], conf, ent[2]) for ent, conf in zip(srtd_cand_ent, confidences)]
-                else:
-                    candidates = self.fuzzy_entity_search(entity)
-                    candidates = list(set(candidates))
-                    srtd_cand_ent = [(ent[0][0], ent[0][1], ent[1], ent[0][2]) for ent in candidates]
-                    srtd_cand_ent = sorted(srtd_cand_ent, key=lambda x: (x[2], x[3]), reverse=True)
-
-                    if len(srtd_cand_ent) > 0:
-                        wiki_entities = [ent[1] for ent in srtd_cand_ent]
-                        confidences = [float(ent[2]) * 0.01 for ent in srtd_cand_ent]
-                    else:
-                        wiki_entities = ["None"]
-                        confidences = [0.0]
-
-        entity_triplets = self.extract_triplets_from_wiki(wiki_entities)
-        if self.rule_filter_entities and self._language == 'rus':
-            filtered_entities, filtered_entity_triplets = self.filter_triplets_rus(entity_triplets,
-                                                                                   question_tokens, srtd_cand_ent)
-        if self.debug:
-            self._log_entities(filtered_entities[:10])
-
-        return filtered_entity_triplets, confidences
-
-    def _log_entities(self, srtd_cand_ent):
-        entities_to_print = []
-        for name, q, ratio, n_rel in srtd_cand_ent:
-            entities_to_print.append(f'{name}, http://wikidata.org/wiki/{q}, {ratio}, {n_rel}')
-        log.debug('\n' + '\n'.join(entities_to_print))
-
-    def find_candidate_entities(self, entity: str) -> List[str]:
-        candidate_entities = list(self.name_to_q.get(entity, []))
-        entity_split = entity.split(' ')
-        if len(entity_split) < 6 and self.lemmatize:
-            entity_lemm_tokens = []
-            for tok in entity_split:
-                morph_parse_tok = self.morph.parse(tok)[0]
-                lemmatized_tok = morph_parse_tok.normal_form
-                entity_lemm_tokens.append(lemmatized_tok)
-            masks = itertools.product([False, True], repeat=len(entity_split))
-            for mask in masks:
-                entity_lemm = []
-                for i in range(len(entity_split)):
-                    if mask[i]:
-                        entity_lemm.append(entity_split[i])
-                    else:
-                        entity_lemm.append(entity_lemm_tokens[i])
-                entity_lemm = ' '.join(entity_lemm)
-                if entity_lemm != entity:
-                    candidate_entities += self.name_to_q.get(entity_lemm, [])
-        candidate_entities = list(set(candidate_entities))
-
-        return candidate_entities
-
-    def fuzzy_entity_search(self, entity: str) -> List[Tuple[Tuple, str]]:
-        word_length = len(entity)
-        candidates = []
-        for title in self.name_to_q:
-            length_ratio = len(title) / word_length
-            if 0.75 < length_ratio < 1.25:
-                ratio = fuzz.ratio(title, entity)
-                if ratio > 70:
-                    entity_candidates = self.name_to_q.get(title, [])
-                    for cand in entity_candidates:
-                        candidates.append((cand, fuzz.ratio(entity, cand[0])))
-        return candidates
-
-    def extract_triplets_from_wiki(self, entity_ids: List[str]) -> List[List[List[str]]]:
-        entity_triplets = []
-        for entity_id in entity_ids:
-            if entity_id in self.wikidata and entity_id.startswith('Q'):
-                triplets_for_entity = self.wikidata[entity_id]
-                entity_triplets.append(triplets_for_entity)
-            else:
-                entity_triplets.append([])
-
-        return entity_triplets
-
-    @staticmethod
-    def filter_triplets_rus(entity_triplets: List[List[List[str]]], question_tokens: List[str],
-                            srtd_cand_ent: List[Tuple[str]]) -> Tuple[List[Tuple[str]], List[List[List[str]]]]:
-
-        question = ' '.join(question_tokens).lower()
-        what_template = 'что '
-        found_what_template = False
-        found_what_template = question.find(what_template) > -1
-        filtered_entity_triplets = []
-        filtered_entities = []
-        for wiki_entity, triplets_for_entity in zip(srtd_cand_ent, entity_triplets):
-            entity_is_human = False
-            entity_is_asteroid = False
-            entity_is_named = False
-            entity_title = wiki_entity[0]
-            if entity_title[0].isupper():
-                entity_is_named = True
-            property_is_instance_of = 'P31'
-            id_for_entity_human = 'Q5'
-            id_for_entity_asteroid = 'Q3863'
-            for triplet in triplets_for_entity:
-                if triplet[0] == property_is_instance_of and triplet[1] == id_for_entity_human:
-                    entity_is_human = True
-                    break
-                if triplet[0] == property_is_instance_of and triplet[1] == id_for_entity_asteroid:
-                    entity_is_asteroid = True
-                    break
-            if found_what_template and (
-                    entity_is_human or entity_is_named or entity_is_asteroid or wiki_entity[2] < 90):
-                continue
-            filtered_entity_triplets.append(triplets_for_entity)
-            filtered_entities.append(wiki_entity)
-
-        return filtered_entities, filtered_entity_triplets
-
-    def candidate_entities_inverted_index(self, entity: str) -> List[Tuple[str]]:
-        word_tokens = nltk.word_tokenize(entity)
+    def candidate_entities_inverted_index(self, entity: str) -> List[Tuple[Any, Any, Any]]:
+        word_tokens = nltk.word_tokenize(entity.lower())
         candidate_entities = []
 
         for tok in word_tokens:
             if len(tok) > 1:
                 found = False
-                if tok in self.inverted_index:
-                    candidate_entities += self.inverted_index[tok]
+                titles_and_popularities = self.extract_title_and_popularity(tok)
+                if titles_and_popularities:
+                    candidate_entities += titles_and_popularities
                     found = True
-                morph_parse_tok = self.morph.parse(tok)[0]
-                lemmatized_tok = morph_parse_tok.normal_form
-                if lemmatized_tok != tok and lemmatized_tok in self.inverted_index:
-                    candidate_entities += self.inverted_index[lemmatized_tok]
-                    found = True
-                if not found:
+
+                if self.lemmatize:
+                    morph_parse_tok = self.morph.parse(tok)[0]
+                    lemmatized_tok = morph_parse_tok.normal_form
+                    titles_and_popularities = self.extract_title_and_popularity(lemmatized_tok)
+                    if titles_and_popularities:
+                        candidate_entities += titles_and_popularities
+                        found = True
+
+                if not found and self.use_prefix_tree:
                     words_with_levens_1 = self.searcher.search(tok, d=1)
                     for word in words_with_levens_1:
-                        candidate_entities += self.inverted_index[word[0]]
-        candidate_entities = list(set(candidate_entities))
+                        candidate_entities += self.extract_title_and_popularity(word[0])
 
+        candidate_entities = list(set(candidate_entities))
         return candidate_entities
 
-    def candidate_entities_names(self, candidate_entities: List[Tuple[str]]) -> List[List[str]]:
-        candidate_names = []
-        for candidate in candidate_entities:
-            entity_id = candidate[0]
-            entity_names = [self.id_to_name[entity_id]["name"]]
-            if "aliases" in self.id_to_name[entity_id].keys():
-                aliases = self.id_to_name[entity_id]["aliases"]
-                for alias in aliases:
-                    entity_names.append(alias)
-            candidate_names.append(entity_names)
-
-        return candidate_names
-
     def sort_found_entities(self, candidate_entities: List[Tuple[str]],
-                            candidate_names: List[List[str]],
-                            entity: str) -> Tuple[List[str], List[str], List[Tuple[str]]]:
+                            entity: str) -> Tuple[List[str], List[float], List[Tuple[str, str, int, int]]]:
         entities_ratios = []
-        for candidate, entity_names in zip(candidate_entities, candidate_names):
-            entity_id = candidate[0]
-            num_rels = candidate[1]
-            entity_name = entity_names[0]
-            morph_parse_entity = self.morph.parse(entity)[0]
-            lemm_entity = morph_parse_entity.normal_form
-            fuzz_ratio_lemm = max([fuzz.ratio(name.lower(), lemm_entity.lower()) for name in entity_names])
-            fuzz_ratio_nolemm = max([fuzz.ratio(name.lower(), entity.lower()) for name in entity_names])
-            fuzz_ratio = max(fuzz_ratio_lemm, fuzz_ratio_nolemm)
-            entities_ratios.append((entity_name, entity_id, fuzz_ratio, num_rels))
+        for entity_id, entity_titles, popularity in candidate_entities:
+            entity_titles = entity_titles.split('\t')
+            fuzz_ratio = max([fuzz.ratio(name.lower(), entity) for name in entity_titles])
+            entities_ratios.append((entity_id, fuzz_ratio, popularity))
 
-        srtd_with_ratios = sorted(entities_ratios, key=lambda x: (x[2], x[3]), reverse=True)
-        wiki_entities = [ent[1] for ent in srtd_with_ratios if ent[2] > 84]
-        confidences = [float(ent[2]) * 0.01 for ent in srtd_with_ratios if ent[2] > 84]
+        srtd_with_ratios = sorted(entities_ratios, key=lambda x: (x[1], x[2]), reverse=True)
+        entity_ids = [ent[0] for ent in srtd_with_ratios]
+        confidences = [float(ent[1]) * 0.01 for ent in srtd_with_ratios]
 
-        return wiki_entities, confidences, srtd_with_ratios
+        return entity_ids, confidences
+
+    def extract_title_and_popularity(self, word):
+        if self.what_to_link == "docs":
+            query = f"SELECT e.doc_title, e.doc_title, i.popularity FROM `{self.inverted_index_doc_table}` i" +\
+                    f"JOIN `{self.entities_list_doc_table}` e ON i.doc_id = e.doc_id WHERE i.word = '{word}'"
+        if self.what_to_link == "entities":
+            query = f"SELECT e.entity_qn, e.entity_titles, i.popularity FROM `{self.inverted_index_table}` i" +\
+                    f"JOIN `{self.entities_list_table}` e ON i.entity_id = e.entity_id WHERE i.word = '{word}'"
+        found_entities = self.cursor.execute()
+        return found_entities.fetchall()
+
