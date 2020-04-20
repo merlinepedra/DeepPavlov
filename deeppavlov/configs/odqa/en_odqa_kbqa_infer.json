@@ -104,6 +104,22 @@
       "{DEEPPAVLOV_PATH}/requirements/en_core_web_sm.txt"
     ],
     "download": [
+      {
+        "url": "http://files.deeppavlov.ai/kbqa/models/ner_lcquad_ent_rel_type_lower.tar.gz",
+        "subdir": "{MODELS_PATH}/ner_lcquad_ent_rel_type_lower"
+      },
+      {
+        "url": "http://files.deeppavlov.ai/embeddings/glove.6B.100d.txt",
+        "subdir": "{DOWNLOADS_PATH}/embeddings"
+      },
+      {
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/templates_eng.pickle",
+        "subdir": "{DOWNLOADS_PATH}/wikidata_eng"
+      },
+      {
+        "url": "http://files.deeppavlov.ai/kbqa/wikidata/wikidata.db",
+        "subdir": "{DOWNLOADS_PATH}/wikidata_eng"
+      }
     ]
   }
 }

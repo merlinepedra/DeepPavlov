@@ -155,8 +155,8 @@
     ],
     "download": [
       {
-        "url": "http://files.deeppavlov.ai/deeppavlov_data/ner_ontonotes_v3_cpu_compatible.tar.gz",
-        "subdir": "{MODELS_PATH}"
+        "url": "http://files.deeppavlov.ai/kbqa/models/ner_lcquad_ent_rel_type_lower.tar.gz",
+        "subdir": "{MODELS_PATH}/ner_lcquad_ent_rel_type_lower"
       },
       {
         "url": "http://files.deeppavlov.ai/embeddings/glove.6B.100d.txt",
