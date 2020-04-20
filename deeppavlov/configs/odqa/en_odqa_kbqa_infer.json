@@ -1,0 +1,109 @@
+{
+  "chainer": {
+    "in": ["question_raw"],
+    "out": ["answer"],
+    "pipe": [
+      {
+        "config_path": "{CONFIGS_PATH}/ner/ner_ent_rel_type_lower.json",
+        "in": ["question_raw"],
+        "out": ["question_tokens", "question_tags"]
+      },
+      {
+        "in": ["question_tokens", "question_tags"],
+        "out": ["entities_substr_from_ner"],
+        "class_name": "entity_detection_parser",
+        "what_to_parse": "tags"
+      },
+      {
+        "in": ["question_raw"],
+        "out": ["entities_substr_from_template", "rels_from_template", "query_types"],
+        "class_name": "template_matcher",
+        "id": "template_m",
+        "load_path": "{DOWNLOADS_PATH}/wikidata_eng",
+        "templates_filename": "templates_eng.pickle"
+      },
+      {
+        "in": ["entities_substr_from_ner"],
+        "out": ["entity_ids", "entity_confs", "doc_ids_linker", "doc_confs"],
+        "class_name": "entity_linker",
+        "id": "linker",
+        "load_path": "{DOWNLOADS_PATH}/wikidata_eng/wikidata.db",
+        "link_with_docs": true,
+        "use_prefix_tree": false,
+        "inverted_index_table": "inverted_index",
+        "entities_list_table": "entities_list",
+        "inverted_index_doc_table": "inverted_index_doc",
+        "entities_list_doc_table": "entities_list_doc"
+      },
+      {
+        "config_path": "{CONFIGS_PATH}/doc_retrieval/en_ranker_tfidf_wiki.json",
+        "in": ["question_raw"],
+        "out": ["tfidf_doc_ids"]
+      },
+      {
+        "in": ["tfidf_doc_ids", "doc_ids_linker"],
+        "out": ["doc_ids"],
+        "class_name": "doc_ids_concat",
+        "doc_ids_to_leave": 5
+      },
+      {
+        "class_name": "wiki_sqlite_vocab",
+        "in": ["doc_ids"],
+        "out": ["doc_text"],
+        "join_docs": false,
+        "shuffle": false,
+        "load_path": "{DOWNLOADS_PATH}/odqa/enwiki.db"
+      },
+      {
+        "class_name": "document_chunker",
+        "in": ["doc_text"],
+        "out": ["chunks"],
+        "flatten_result": true,
+        "paragraphs": true
+      },
+      {
+        "class_name": "string_multiplier",
+        "in": ["question_raw", "chunks"],
+        "out":["questions"]
+      },
+      {
+        "class_name": "logit_ranker",
+        "batch_size": 10,
+        "squad_model": {"config_path": "{CONFIGS_PATH}/squad/multi_squad_noans_infer.json"},
+        "sort_noans": true,
+        "in": ["chunks", "questions"],
+        "out": ["odqa_answer", "odqa_answer_score"]
+      },
+      {
+        "in": ["question_raw", "entity_ids", "entity_confs", "rels_from_template"],
+        "out": ["kbqa_answer", "kbqa_answer_score"],
+        "load_path": "{DOWNLOADS_PATH}/wikidata_eng/wikidata.db",
+        "class_name": "kb_answer_parser_simple",
+        "top_k_classes": 5,
+        "lemmatize": false,
+        "rule_filter_entities": true,
+        "language": "eng"
+      },
+      {
+        "in": ["odqa_answer", "odqa_answer_score", "kbqa_answer", "kbqa_answer_score"],
+        "out": ["answer"],
+        "class_name": "odqa_kbqa_chooser"
+      }
+    ]
+  },
+  "metadata": {
+    "variables": {
+      "ROOT_PATH": "~/.deeppavlov",
+      "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
+      "MODELS_PATH": "{ROOT_PATH}/models",
+      "CONFIGS_PATH": "{DEEPPAVLOV_PATH}/configs"
+    },
+    "requirements": [
+      "{DEEPPAVLOV_PATH}/requirements/tf.txt",
+      "{DEEPPAVLOV_PATH}/requirements/spacy.txt",
+      "{DEEPPAVLOV_PATH}/requirements/en_core_web_sm.txt"
+    ],
+    "download": [
+    ]
+  }
+}
