@@ -22,9 +22,8 @@ import sqlite3
 
 from deeppavlov.core.common.registry import register
 from deeppavlov.core.models.component import Component
-from deeppavlov.core.models.serializable import Serializable
+from deeppavlov.core.commands.utils import expand_path
 from deeppavlov.models.spelling_correction.levenshtein.levenshtein_searcher import LevenshteinSearcher
-from deeppavlov.models.kbqa.wiki_parser import WikiParser
 
 log = getLogger(__name__)
 
@@ -32,23 +31,22 @@ log = getLogger(__name__)
 @register('entity_linker')
 class EntityLinker(Component):
     def __init__(self, load_path: str,
-                 inverted_index_doc_table: Optional[str] = None,
-                 entities_list_doc_table: Optional[str] = None,
                  inverted_index_table: str,
                  entities_list_table: str,
+                 inverted_index_doc_table: Optional[str] = None,
+                 entities_list_doc_table: Optional[str] = None,
                  lemmatize: bool = False,
                  use_prefix_tree: bool = False,
                  link_with_docs: bool = False,
                  **kwargs) -> None:
         
-        super().__init__(save_path=None, load_path=load_path)
         self.morph = pymorphy2.MorphAnalyzer()
         self.lemmatize = lemmatize
         self.use_prefix_tree = use_prefix_tree
         self.link_with_docs = link_with_docs
         self.what_to_link = "entities"
         
-        self.conn = sqlite3.conn(load_path)
+        self.conn = sqlite3.connect(str(expand_path(load_path)))
         self.cursor = self.conn.cursor()
 
         if self.link_with_docs:
@@ -72,6 +70,7 @@ class EntityLinker(Component):
             entity_ids_list, confidences_list = self.link_entities(entities)
             entity_ids_batch.append(entity_ids_list)
             entity_confidences_batch.append(confidences_list)
+        log.debug(f"entity_ids: {[[entity_ids[:10] for entity_ids in entity_ids_list] for entity_ids_list in entity_ids_batch]}")
         if self.link_with_docs:
             self.what_to_link = "docs"
             doc_ids_batch = []
@@ -80,6 +79,7 @@ class EntityLinker(Component):
                 doc_ids_list, confidences_list = self.link_entities(entities)
                 doc_ids_batch.append(doc_ids_list)
                 doc_confidences_batch.append(confidences_list)
+            log.debug(f"doc_ids: {[[doc_ids[:10] for doc_ids in doc_ids_list] for doc_ids_list in doc_ids_batch]}")
             return entity_ids_batch, entity_confidences_batch, doc_ids_batch, doc_confidences_batch
 
         else:
@@ -139,11 +139,12 @@ class EntityLinker(Component):
 
     def extract_title_and_popularity(self, word):
         if self.what_to_link == "docs":
-            query = f"SELECT e.doc_title, e.doc_title, i.popularity FROM `{self.inverted_index_doc_table}` i" +\
+            query = f"SELECT e.doc_title, e.doc_title, i.popularity FROM `{self.inverted_index_doc_table}` i " +\
                     f"JOIN `{self.entities_list_doc_table}` e ON i.doc_id = e.doc_id WHERE i.word = '{word}'"
         if self.what_to_link == "entities":
-            query = f"SELECT e.entity_qn, e.entity_titles, i.popularity FROM `{self.inverted_index_table}` i" +\
+            query = f"SELECT e.entity_qn, e.entity_titles, i.popularity FROM `{self.inverted_index_table}` i " +\
                     f"JOIN `{self.entities_list_table}` e ON i.entity_id = e.entity_id WHERE i.word = '{word}'"
-        found_entities = self.cursor.execute()
+        
+        found_entities = self.cursor.execute(query)
         return found_entities.fetchall()
 
