@@ -21,7 +21,7 @@ from deeppavlov.core.data.data_learning_iterator import DataLearningIterator
 @register('kvret_dialog_iterator')
 class KvretDialogDatasetIterator(DataLearningIterator):
     """
-    Inputs data from :class:`~deeppavlov.dataset_readers.dstc2_reader.DSTC2DatasetReader`, constructs dialog history for each turn, generates batches (one sample is a turn).
+    Inputs data from :class:`~deeppavlov.dataset_readers.dstc2.dstc2_reader.DSTC2DatasetReader`, constructs dialog history for each turn, generates batches (one sample is a turn).
 
     Inherits key methods and attributes from :class:`~deeppavlov.core.data.data_learning_iterator.DataLearningIterator`.
 

@@ -208,7 +208,7 @@ Challenge 2 [2]_. The modifications were as follows:
    -  uppercased first letter of bot responses
    -  unified punctuation for bot responses
 
-See :class:`deeppavlov.dataset_readers.dstc2_reader.DSTC2DatasetReader` for implementation.
+See :class:`deeppavlov.dataset_readers.dstc2.dstc2_reader.DSTC2DatasetReader` for implementation.
 
 Your data
 ^^^^^^^^^
@@ -217,9 +217,9 @@ Dialogs
 """""""
 
 If your model uses DSTC2 and relies on ``"dstc2_reader"``
-(:class:`~deeppavlov.dataset_readers.dstc2_reader.DSTC2DatasetReader`),
+(:class:`~deeppavlov.dataset_readers.dstc2.dstc2_reader.DSTC2DatasetReader`),
 all needed files, if not present in the
-:attr:`DSTC2DatasetReader.data_path <deeppavlov.dataset_readers.dstc2_reader.DSTC2DatasetReader.data_path>` directory,
+:attr:`DSTC2DatasetReader.data_path <deeppavlov.dataset_readers.dstc2.dstc2_reader.DSTC2DatasetReader.data_path>` directory,
 will be downloaded from web.
 
 If your model needs to be trained on different data, you have several ways of
@@ -231,18 +231,18 @@ achieving that (sorted by increase in the amount of code):
 
    -  set ``dataset_reader.data_path`` to your data directory;
    -  your data files should have the same format as expected in
-      :meth:`DSTC2DatasetReader.read() <deeppavlov.dataset_readers.dstc2_reader.DSTC2DatasetReader.read>`
+      :meth:`DSTC2DatasetReader.read() <deeppavlov.dataset_readers.dstc2.dstc2_reader.DSTC2DatasetReader.read>`
       method.
 
 2. Use ``"dialog_iterator"`` in dataset iterator config section and
    ``"your_dataset_reader"`` in dataset reader config section (**recommended**):
 
-   -  clone :class:`deeppavlov.dataset_readers.dstc2_reader.DSTC2DatasetReader` to
+   -  clone :class:`deeppavlov.dataset_readers.dstc2.dstc2_reader.DSTC2DatasetReader` to
       ``YourDatasetReader``;
    -  register as ``"your_dataset_reader"``;
    -  rewrite so that it implements the same interface as the origin.
       Particularly, ``YourDatasetReader.read()`` must have the same output as
-      :meth:`DSTC2DatasetReader.read() <deeppavlov.dataset_readers.dstc2_reader.DSTC2DatasetReader.read>`.
+      :meth:`DSTC2DatasetReader.read() <deeppavlov.dataset_readers.dstc2.dstc2_reader.DSTC2DatasetReader.read>`.
    
       -  ``train`` — training dialog turns consisting of tuples:
       
