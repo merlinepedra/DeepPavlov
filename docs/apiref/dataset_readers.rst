@@ -10,6 +10,9 @@ Concrete DatasetReader classes.
 .. automodule:: deeppavlov.dataset_readers.dstc2.dstc2_reader
    :members:
 
+.. automodule:: deeppavlov.dataset_readers.dstc2.simple_dstc2_reader
+   :members:
+
 .. autoclass:: deeppavlov.dataset_readers.faq_reader.FaqDatasetReader
    :members:
    
