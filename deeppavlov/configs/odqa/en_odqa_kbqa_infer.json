@@ -4,7 +4,7 @@
     "out": ["answer"],
     "pipe": [
       {
-        "config_path": "{CONFIGS_PATH}/ner/ner_ent_rel_type_lower.json",
+        "config_path": "{CONFIGS_PATH}/ner/ner_lcquad_bert_probas.json",
         "in": ["question_raw"],
         "out": ["question_tokens", "question_tags"]
       },
@@ -12,7 +12,7 @@
         "in": ["question_tokens", "question_tags"],
         "out": ["entities_substr_from_ner"],
         "class_name": "entity_detection_parser",
-        "what_to_parse": "tags"
+        "what_to_parse": "probas"
       },
       {
         "in": ["question_raw"],
@@ -41,10 +41,10 @@
         "out": ["tfidf_doc_ids"]
       },
       {
-        "in": ["tfidf_doc_ids", "doc_ids_linker"],
+        "in": ["doc_ids_linker", "tfidf_doc_ids"],
         "out": ["doc_ids"],
         "class_name": "doc_ids_concat",
-        "doc_ids_to_leave": 5
+        "doc_ids_to_leave": 2
       },
       {
         "class_name": "wiki_sqlite_vocab",

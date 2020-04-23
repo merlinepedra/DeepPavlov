@@ -91,8 +91,8 @@ class EntityLinker(Component):
         for entity in entities:
             candidate_entities = self.candidate_entities_inverted_index(entity)
             entity_ids, confidences = self.sort_found_entities(candidate_entities, entity)
-            entity_ids_list.append(entity_ids)
-            confidences_list.append(confidences)
+            entity_ids_list.append(entity_ids[:10])
+            confidences_list.append(confidences[:10])
         return entity_ids_list, confidences_list
 
     def candidate_entities_inverted_index(self, entity: str) -> List[Tuple[Any, Any, Any]]:
@@ -139,11 +139,11 @@ class EntityLinker(Component):
 
     def extract_title_and_popularity(self, word):
         if self.what_to_link == "docs":
-            query = f"SELECT e.doc_title, e.doc_title, i.popularity FROM `{self.inverted_index_doc_table}` i " +\
-                    f"JOIN `{self.entities_list_doc_table}` e ON i.doc_id = e.doc_id WHERE i.word = '{word}'"
+            query = f'''SELECT e.doc_title, e.doc_title, i.popularity FROM `{self.inverted_index_doc_table}` i ''' +\
+                    f'''JOIN `{self.entities_list_doc_table}` e ON i.doc_id = e.doc_id WHERE i.word = "{word}"'''
         if self.what_to_link == "entities":
-            query = f"SELECT e.entity_qn, e.entity_titles, i.popularity FROM `{self.inverted_index_table}` i " +\
-                    f"JOIN `{self.entities_list_table}` e ON i.entity_id = e.entity_id WHERE i.word = '{word}'"
+            query = f'''SELECT e.entity_qn, e.entity_titles, i.popularity FROM `{self.inverted_index_table}` i ''' +\
+                    f'''JOIN `{self.entities_list_table}` e ON i.entity_id = e.entity_id WHERE i.word = "{word}"'''
         
         found_entities = self.cursor.execute(query)
         return found_entities.fetchall()

@@ -50,13 +50,19 @@ class KBAnswerParserSimple(KBBase):
         if rels_from_nn_batch == None:
             rels_from_nn_batch = [[] for i in range(len(questions_batch))]
             rels_probs_batch = [[] for i in range(len(questions_batch))]
+        log.debug(f"entity_ids in answer parser {entity_ids_batch}")
 
         for question, entity_ids_list, entity_confs_list, rels_from_template, rels_from_nn, rels_probs in \
             zip(questions_batch, entity_ids_batch, entity_confs_batch, rels_from_template_batch, rels_from_nn_batch, rels_probs_batch):
 
             is_kbqa = self.is_kbqa_question(question, self.language)
-            if is_kbqa and len(entity_ids_list) == 1:
-                entity_ids, entity_confs = entity_ids_list[0], entity_confs_list[0]
+            if is_kbqa:
+                entity_ids = []
+                for ids_for_entity in entity_ids_list:
+                    entity_ids += ids_for_entity[:10]
+                entity_confs = []
+                for confs_for_entity in entity_confs_list:
+                    entity_confs += confs_for_entity[:10]
                 entity_triplets = self.extract_triplets_from_wiki(entity_ids)
                 if rels_from_template:
                     predicted_relations = [rels_from_template[0][0]]
@@ -64,6 +70,8 @@ class KBAnswerParserSimple(KBBase):
                 elif rels_from_nn:
                     predicted_relations = rels_from_nn
                     predicted_rel_probs = self._parse_relations_probs(relations_probs)
+                else:
+                    predicted_relations, predicted_rel_probs = [], []
                 
                 if self.rule_filter_entities and self.language == 'rus':
                     entity_ids, entity_triplets, entity_confs = \

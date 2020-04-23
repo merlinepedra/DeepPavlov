@@ -49,6 +49,7 @@ class KBBase(Component):
     def parse_wikidata_object(self,
                               objects_batch: List[str],
                               confidences_batch: List[float]) -> Tuple[List[str], List[float]]:
+        log.debug(f"answer q to name: {objects_batch}")
         parsed_objects = []
         for n, obj in enumerate(objects_batch):
             if len(obj) > 0:
@@ -82,14 +83,13 @@ class KBBase(Component):
                       relation_probs: List[float]) -> Tuple[str, float]:
         obj = ''
         confidence = 0.0
-        #log.debug(f"match_triplet, entity_triplets: {entity_triplets[:5]}")
-        log.debug(f"match_triplet, relations: {relations}")
         for predicted_relation, rel_prob in zip(relations, relation_probs):
             for entities, linking_confidence in zip(entity_triplets, entity_linking_confidences):
                 for rel_triplets in entities:
-                    _, relation_from_wiki, object_from_wiki  = rel_triplets
+                    _, relation_from_wiki, object_from_wiki = rel_triplets
                     if predicted_relation == relation_from_wiki:
                         obj = object_from_wiki
+                        log.debug(f"found object {obj}, {object_from_wiki}, {rel_triplets}")
                         confidence = linking_confidence * rel_prob
                         return obj, confidence
         return obj, confidence

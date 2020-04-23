@@ -51,6 +51,7 @@ class EntityDetectionParser(Component):
 
             entities = self.entities_from_tags(tokens, tags)
             entities_batch.append(entities)
+        log.debug(f"entity substrings {entities_batch}")
         return entities_batch
 
     def tags_from_probas(self, tokens, probas):
@@ -65,7 +66,7 @@ class EntityDetectionParser(Component):
     def entities_from_tags(self, tokens, tags):
         entities = []
         entity = []
-        replace_tokens = [(' - ', '-'), ("'s", ''), (' .', ''), ('{', ''), ('}', ''), ('  ', ' '), ('"', "'")]
+        replace_tokens = [(' - ', '-'), (" 's", "'s"), (' .', ''), ('{', ''), ('}', ''), ('  ', ' '), ('"', "'")]
 
         for tok, tag in zip(tokens, tags):
             if tag:
