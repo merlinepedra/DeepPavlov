@@ -196,6 +196,11 @@ class BertSequenceNetwork(LRScheduledTFModel):
                  hidden_keep_prob: float = None,
                  encoder_layer_ids: List[int] = (-1,),
                  encoder_dropout: float = 0.0,
+                 additional_inputs_dim: Optional[List[int]] = None,
+                 are_additional_inputs_indexes: Optional[List[bool]] = False,
+                 additional_embeddings_dim: Optional[List] = None,
+                 additional_activations: Optional[List] = None,
+                 additional_inputs_dropout: Union[float,List[float]] = 0.0,
                  optimizer: str = None,
                  weight_decay_rate: float = 1e-6,
                  ema_decay: float = None,
@@ -218,6 +223,9 @@ class BertSequenceNetwork(LRScheduledTFModel):
         self.keep_prob = keep_prob
         self.encoder_layer_ids = encoder_layer_ids
         self.encoder_dropout = encoder_dropout
+        self._initialize_additional_inputs(additional_inputs_dim, # are_additional_inputs_indexes,
+                                           additional_embeddings_dim, additional_activations, 
+                                           additional_inputs_dropout)
         self.optimizer = optimizer
         self.weight_decay_rate = weight_decay_rate
         self.ema_decay = ema_decay
@@ -261,6 +269,34 @@ class BertSequenceNetwork(LRScheduledTFModel):
         if self.ema:
             self.sess.run(self.ema.init_op)
 
+    def _initialize_additional_inputs(self, # additional_inputs_dim, 
+                                      are_additional_inputs_indexes, additional_embeddings_dim,
+                                      additional_activations, additional_inputs_dropout):
+        self.additional_inputs_dim = additional_inputs_dim or []
+        self.additional_inputs_number = len(self.additional_inputs_dim)
+        whether inputs are indexes
+        if not isinstance(are_additional_inputs_indexes, List):
+            self.are_additional_inputs_indexes = [are_additional_inputs_indexes] * self.additional_inputs_number
+        if len(self.are_additional_inputs_indexes) != self.additional_inputs_number:
+            raise ValueError("The length of 'self.are_additional_inputs_indexes' "
+                             "must be equal to the number of additional_inputs")
+        # additional_embeddings
+        if not isinstance(additional_embeddings_dim, List):
+            self.additional_embeddings_dim = [additional_embeddings_dim] * self.additional_inputs_number
+        if len(self.additional_embeddings_dim) != self.additional_inputs_number:
+            raise ValueError("The number of addiitional embeddings must be equal "
+                             "to the number of additional_inputs")
+        if not isinstance(additional_activations, List):
+            self.additional_activations = [additional_activations] * self.additional_inputs_number
+        if len(self.additional_activations) != self.additional_inputs_number:
+            raise ValueError("The number of addiitional activations must be equal "
+                             "to the number of additional_inputs")
+        if not isinstance(additional_inputs_dropout, List):
+            self.additional_inputs_dropout = [additional_inputs_dropout] * self.additional_inputs_number
+        if len(self.additional_inputs_dropout) != self.additional_inputs_number:
+            raise ValueError("The number of addiitional dropout rates must be equal "
+                             "to the number of additional_inputs")   
+
     def _init_graph(self) -> None:
         self.seq_lengths = tf.reduce_sum(self.y_masks_ph, axis=1)
 
@@ -285,6 +321,23 @@ class BertSequenceNetwork(LRScheduledTFModel):
             # TODO: may be stack and reduce_sum is faster
             units = sum(w * l for w, l in zip(layer_weights, self.encoder_layers()))
             units = tf.nn.dropout(units, keep_prob=self.keep_prob_ph)
+
+        if self.additional_inputs_number > 0:
+            with tf.variable_scope('ner/additional_inputs'):
+                additional_embeddings = self.additional_inputs_ph
+                for i, curr_units in enumerate(self.additional_inputs_ph):
+                    is_index = self.are_additional_inputs_indexes[i]
+                    input_dim = self.additional_inputs_dim[i]
+                    output_dim = self.additional_embeddings_dim[i]
+                    activation = self.additional_activations[i]
+                    if is_index:
+                        curr_units = tf.one_hot(curr_units, depth=input_dim)
+                    if output_dim is not None:
+                        curr_units = tf.keras.layers.Dense(curr_units, output_dim,
+                                                           activation=activation)
+                    keep_prob=self.additional_keep_prob_ph[i]
+                    additional_embeddings[i] = tf.nn.dropout(curr_units, keep_prob=keep_prob)
+                units = tf.concat(-1, [units] + additional_embeddings)
         return units
 
     def _get_tag_mask(self) -> tf.Tensor:
@@ -318,6 +371,17 @@ class BertSequenceNetwork(LRScheduledTFModel):
         self.keep_prob_ph = tf.placeholder_with_default(1.0, shape=[], name='keep_prob_ph')
         self.encoder_keep_prob_ph = tf.placeholder_with_default(1.0, shape=[], name='encoder_keep_prob_ph')
         self.is_train_ph = tf.placeholder_with_default(False, shape=[], name='is_train_ph')
+        if self.additional_inputs_number > 0:
+            self.additional_inputs_ph, self.additional_keep_prob_ph = [], []
+            for r, (is_index, dim) in enumerate(
+                    zip(self.are_additional_inputs_indexes, self.additional_inputs_dim)):
+                shape = (None, None) if is_index else (None, None, dim)
+                dtype = tf.int32 if is_index else tf.float32
+                placeholder = tf.placeholder(shape=shape, dtype=dtype, name="additional_input_{}".format(r+1))
+                self.additional_inputs_ph.append(placeholder)
+                keep_prob_ph = tf.placeholder_with_default(1.0, shape=[], 
+                                                           name='additional_input_keep_prob_ph_{}'.format(r+1))
+                self.additional_keep_prob_ph.append(keep_prob_ph)
 
     def _init_optimizer(self) -> None:
         with tf.variable_scope('Optimizer'):
@@ -384,7 +448,9 @@ class BertSequenceNetwork(LRScheduledTFModel):
         return tf.group(bert_train_op, head_train_op)
 
     def _build_basic_feed_dict(self, input_ids: tf.Tensor, input_masks: tf.Tensor,
-                               token_types: Optional[tf.Tensor]=None, train: bool=False) -> dict:
+                               token_types: Optional[tf.Tensor]=None, 
+                               additional_inputs: Optional[List[tf.Tensor]]=None,
+                               train: bool=False) -> dict:
         """Fills the feed_dict with the tensors defined in the basic class.
         You need to update this dict by the values of output placeholders
         and class-specific network inputs in your derived class.
@@ -395,6 +461,11 @@ class BertSequenceNetwork(LRScheduledTFModel):
         }
         if token_types is not None:
             feed_dict[self.token_types_ph] = token_types
+        if self.additional_inputs_number > 0:
+            feed_dict.update({
+                self.additional_inputs_ph: additional_inputs,
+                self.additional_keep_prob_ph: 1.0 - np.array(self.additional_inputs_dropout),
+            })
         if train:
             feed_dict.update({
                 self.learning_rate_ph: max(self.get_learning_rate(), self.min_learning_rate),
@@ -484,6 +555,11 @@ class BertSequenceTagger(BertSequenceNetwork):
                  use_crf=False,
                  encoder_layer_ids: List[int] = (-1,),
                  encoder_dropout: float = 0.0,
+                 additional_inputs_dim: Optional[List[int]] = None,
+                 are_additional_inputs_indexes: Optional[List[bool]] = False,
+                 additional_embeddings_dim: Optional[List] = None,
+                 additional_activations: Optional[List] = None,
+                 additional_inputs_dropout: Union[float,List[float]] = 0.0,
                  optimizer: str = None,
                  weight_decay_rate: float = 1e-6,
                  use_birnn: bool = False,
@@ -516,6 +592,11 @@ class BertSequenceTagger(BertSequenceNetwork):
                          hidden_keep_prob=hidden_keep_prob,
                          encoder_layer_ids=encoder_layer_ids,
                          encoder_dropout=encoder_dropout,
+                         additional_inputs_dim=additional_inputs_dim,
+                         are_additional_inputs_indexes=are_additional_inputs_indexes,
+                         additional_embeddings_dim=additional_embeddings_dim,
+                         additional_activations=additional_activations,
+                         additional_inputs_dropout=additional_inputs_dropout,
                          optimizer=optimizer,
                          weight_decay_rate=weight_decay_rate,
                          ema_decay=ema_decay,
@@ -595,8 +676,11 @@ class BertSequenceTagger(BertSequenceNetwork):
             y_pred += [viterbi_seq]
         return y_pred
 
-    def _build_feed_dict(self, input_ids, input_masks, y_masks, y=None):
-        feed_dict = self._build_basic_feed_dict(input_ids, input_masks, train=(y is not None))
+    def _build_feed_dict(self, input_ids, input_masks, y_masks, 
+                         additional_inputs=None, y=None):
+        feed_dict = self._build_basic_feed_dict(input_ids, input_masks, 
+                                                additional_inputs=additional_inputs,
+                                                train=(y is not None))
         feed_dict[self.y_masks_ph] = y_masks
         if y is not None:
             feed_dict[self.y_ph] = y
@@ -605,19 +689,22 @@ class BertSequenceTagger(BertSequenceNetwork):
     def __call__(self,
                  input_ids: Union[List[List[int]], np.ndarray],
                  input_masks: Union[List[List[int]], np.ndarray],
-                 y_masks: Union[List[List[int]], np.ndarray]) -> Union[List[List[int]], List[np.ndarray]]:
+                 y_masks: Union[List[List[int]], np.ndarray],
+                 additional_inputs: Optional[Union[List[List[int]], np.ndarray]]=None)\
+                      -> Union[List[List[int]], List[np.ndarray]]:
         """ Predicts tag indices for a given subword tokens batch
 
         Args:
             input_ids: indices of the subwords
             input_masks: mask that determines where to attend and where not to
             y_masks: mask which determines the first subword units in the the word
-
+            additional_inputs: optional additional inputs to the network
         Returns:
             Label indices or class probabilities for each token (not subtoken)
 
         """
-        feed_dict = self._build_feed_dict(input_ids, input_masks, y_masks)
+        feed_dict = self._build_feed_dict(input_ids, input_masks, y_masks,
+                                          additional_inputs=additional_inputs)
         if self.ema:
             self.sess.run(self.ema.switch_to_test_op)
         if not self.return_probas:
