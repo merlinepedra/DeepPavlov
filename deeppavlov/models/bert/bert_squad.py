@@ -61,6 +61,7 @@ class BertSQuADModel(LRScheduledTFModel):
                  attention_probs_keep_prob: Optional[float] = None,
                  hidden_keep_prob: Optional[float] = None,
                  optimizer: Optional[str] = None,
+                 freezed_embeddings: bool = False,
                  weight_decay_rate: Optional[float] = 0.01,
                  pretrained_bert: Optional[str] = None,
                  min_learning_rate: float = 1e-06, **kwargs) -> None:
@@ -70,6 +71,7 @@ class BertSQuADModel(LRScheduledTFModel):
         self.keep_prob = keep_prob
         self.optimizer = optimizer
         self.weight_decay_rate = weight_decay_rate
+        self.freezed_embeddings = freezed_embeddings
 
         self.bert_config = BertConfig.from_json_file(str(expand_path(bert_config_file)))
 
@@ -184,6 +186,10 @@ class BertSQuADModel(LRScheduledTFModel):
             self.global_step = tf.get_variable('global_step', shape=[], dtype=tf.int32,
                                                initializer=tf.constant_initializer(0), trainable=False)
             # default optimizer for Bert is Adam with fixed L2 regularization
+
+            if self.freezed_embeddings:
+                learnable_scopes = ('bert/encoder', 'squad')
+
             if self.optimizer is None:
 
                 self.train_op = self.get_train_op(self.loss, learning_rate=self.learning_rate_ph,
@@ -192,10 +198,11 @@ class BertSQuADModel(LRScheduledTFModel):
                                                   beta_1=0.9,
                                                   beta_2=0.999,
                                                   epsilon=1e-6,
-                                                  exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"]
+                                                  exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"],
+                                                  learnable_scopes = learnable_scopes
                                                   )
             else:
-                self.train_op = self.get_train_op(self.loss, learning_rate=self.learning_rate_ph)
+                self.train_op = self.get_train_op(self.loss, learning_rate=self.learning_rate_ph, learnable_scopes=learnable_scopes)
 
             if self.optimizer is None:
                 new_global_step = self.global_step + 1
