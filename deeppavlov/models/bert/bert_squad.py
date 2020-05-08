@@ -187,6 +187,8 @@ class BertSQuADModel(LRScheduledTFModel):
                                                initializer=tf.constant_initializer(0), trainable=False)
             # default optimizer for Bert is Adam with fixed L2 regularization
 
+            learnable_scopes = None
+
             if self.freezed_embeddings:
                 learnable_scopes = ('bert/encoder', 'squad', 'bert/pooler', 'momentum', 'learning_rate')
 
