@@ -127,8 +127,11 @@ class TFModel(NNModel, metaclass=TfModelMeta):
                 variables_to_train = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
             else:
                 variables_to_train = []
+                log.info('learnable_scopes: {}'.format(learnable_scopes))
+
                 for scope_name in learnable_scopes:
                     variables_to_train.extend(tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope_name))
+            
                 import pprint
                 pp = pprint.PrettyPrinter(indent=4)
                 pp.pprint(variables_to_train)
