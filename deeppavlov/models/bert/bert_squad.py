@@ -31,8 +31,8 @@ from deeppavlov.core.models.estimator import Component
 from deeppavlov.core.models.tf_model import LRScheduledTFModel
 from deeppavlov.models.squad.utils import softmax_mask
 
+log = getLogger(__name__)
 logger = getLogger(__name__)
-
 
 @register('squad_bert_model')
 class BertSQuADModel(LRScheduledTFModel):
@@ -62,6 +62,7 @@ class BertSQuADModel(LRScheduledTFModel):
                  hidden_keep_prob: Optional[float] = None,
                  optimizer: Optional[str] = None,
                  freezed_embeddings: bool = False,
+                 freezed_bert: bool = False,
                  weight_decay_rate: Optional[float] = 0.01,
                  pretrained_bert: Optional[str] = None,
                  min_learning_rate: float = 1e-06, **kwargs) -> None:
@@ -72,6 +73,7 @@ class BertSQuADModel(LRScheduledTFModel):
         self.optimizer = optimizer
         self.weight_decay_rate = weight_decay_rate
         self.freezed_embeddings = freezed_embeddings
+        self.freezed_bert = freezed_bert
 
         self.bert_config = BertConfig.from_json_file(str(expand_path(bert_config_file)))
 
@@ -191,6 +193,11 @@ class BertSQuADModel(LRScheduledTFModel):
 
             if self.freezed_embeddings:
                 learnable_scopes = ('bert/encoder', 'squad', 'bert/pooler', 'momentum', 'learning_rate')
+
+            if self.freezed_bert:
+                learnable_scopes = ('squad', 'momentum', 'learning_rate')
+
+            log.info('learnable_scopes {}'.format(learnable_scopes))
 
             if self.optimizer is None:
 
