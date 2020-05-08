@@ -74,7 +74,7 @@ class SquadDatasetReader(DatasetReader):
             raise RuntimeError('Dataset {} is unknown'.format(dataset))
 
         dir_path = Path(dir_path)
-        required_files = ['{}-v1.1.json'.format(dt) for dt in ['train', 'dev']]
+        required_files = ['{}-v1.1.json'.format(dt) for dt in ['train', 'dev', 'test']]
         if not dir_path.exists():
             dir_path.mkdir()
 
@@ -87,8 +87,10 @@ class SquadDatasetReader(DatasetReader):
                 data = json.load(fp)
             if f == 'dev-v1.1.json':
                 dataset['valid'] = data
-            else:
+            elif f == 'train-v1.1.json':
                 dataset['train'] = data
+            elif f == 'test-v1.1.json':
+                dataset['test'] = data
 
         return dataset
 
