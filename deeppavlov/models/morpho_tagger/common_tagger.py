@@ -101,7 +101,8 @@ def _are_equal_pos(first, second):
 IDLE_FEATURES = {"Voice", "Animacy", "Degree", "Mood", "VerbForm"}
 
 
-def get_tag_distance(first, second, first_sep=",", second_sep=" ", pos_cost=1):
+def get_tag_distance(first, second, first_sep=",", second_sep=" ",
+                     idle_features=None):
     """
     Measures the distance between two (Russian) morphological tags in UD Format.
     The first tag is usually the one predicted by our model (therefore it uses comma
@@ -117,18 +118,87 @@ def get_tag_distance(first, second, first_sep=",", second_sep=" ", pos_cost=1):
     Returns:
         the number of mismatched feature values
     """
+    if idle_features is None:
+        idle_features = IDLE_FEATURES
     first_pos, first_feats = make_pos_and_tag(first, sep=first_sep, return_mode="dict")
     second_pos, second_feats = make_pos_and_tag(second, sep=second_sep, return_mode="dict")
-    dist = int(not _are_equal_pos(first_pos, second_pos)) * pos_cost
+    dist = int(not _are_equal_pos(first_pos, second_pos))
     for key, value in first_feats.items():
         other = second_feats.get(key)
         if other is None:
-            dist += int(key not in IDLE_FEATURES)
+            dist += int(key not in idle_features)
         else:
             dist += int(value != other)
     for key in second_feats:
-        dist += int(key not in first_feats and key not in IDLE_FEATURES)
+        dist += int(key not in first_feats and key not in idle_features)
     return dist
+
+@register("tag_normalizer")
+class TagNormalizer(Estimator):
+
+    def __init__(self, basic_language: Union[int, str] = 0, idle_features: Optional[List[str]] = None, 
+                 save_path: Optional[str] = None, load_path: Optional[str] = None, *args, **kwargs):
+        self.basic_language = basic_language
+        self.basic_tags = set()
+        self.basic_pos = set()
+        self.tag_mapping = dict()
+        self.idle_features = idle_features or []
+        self.save_path = save_path
+        self.load_path = load_path
+
+    def save(self, *args, **kwargs):
+        if self.save_path:
+            answer = {"basic_tags": list(self.basic_tags), "basic_pos": list(self.basic_pos),
+                      "tag_mapping": self.tag_mapping, "idle_features": self.idle_features}
+            with open(self.save_path, "w", encoding="utf8") as fout:
+                json.dump(answer, fout)
+
+    def load(self, *args, **kwargs):
+        if self.load_path:
+            with open(self.save_path, "r", encoding="utf8") as fin:
+                data = json.load(fin)
+            for key, value in data.items():
+                if key in ["basic_pos", "basic_tags"]:
+                    value = set(value)
+                setattr(self, key, value)
+
+    def fit(self, tag_sents, languages):
+        for tag_sent, language_index in zip(tag_sents, languages):
+            for tag in tag_sent:
+                if language_index == self.basic_language:
+                    self.basic_tags.add(tag)
+                    pos = tag.split(",")[0]
+                    self.basic_pos.add(pos)
+        return
+
+    def _find_closest_tag(self, tag):
+        if tag in self.tag_mapping:
+            return self.tag_mapping[tag]
+        pos = tag.split(",")[0]
+        if pos not in self.basic_pos:
+            return pos
+        best_dist, best_tag = np.inf, None
+        for basic_tag in self.basic_tags:
+            dist = get_tag_distance(basic_tag, tag, first_sep=",", second_sep=",", idle_features=self.idle_features)
+            if dist < best_dist:
+                best_dist, best_tag = dist, basic_tag
+        return basic_tag
+
+    def __call__(self, tag_sents, languages=None):
+        if languages is None:
+            languages = [self.basic_language] * len(tag_sents)
+        answer = []
+        for tag_sent, language_index in zip(tag_sents, languages):
+            curr_answer = []
+            for tag in tag_sent:
+                if language_index == self.basic_language:
+                    basic_tag = tag
+                else:
+                    basic_tag = self._find_closest_tag(tag)
+                self.tag_mapping[tag] = basic_tag
+                curr_answer.append(basic_tag)
+            answer.append(curr_answer)
+        return answer    
 
 
 @register("hashtag_remover")
