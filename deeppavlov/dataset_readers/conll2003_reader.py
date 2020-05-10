@@ -29,7 +29,10 @@ class BasicNerReader(DatasetReader):
 
     def read(self, data_path: List[Union[str, Path]],
              data_types: List[str], sep: str = None, 
-             max_length=None, **kwargs):
+             max_length=None, 
+             provide_pos=False,
+             **kwargs):
+        self.provide_pos = self.x_is_tuple = provide_pos
         if len(data_path) != len(data_types):
             raise ValueError("There must be equal number of data types and input files")
         answer = {"train": [], "valid": [], "test": []}    

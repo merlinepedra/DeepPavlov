@@ -15,6 +15,7 @@
   "bert_as_summarizer": "deeppavlov.models.bert.bert_as_summarizer:BertAsSummarizer",
   "bert_classifier": "deeppavlov.models.bert.bert_classifier:BertClassifierModel",
   "bert_ner_preprocessor": "deeppavlov.models.preprocessors.bert_preprocessor:BertNerPreprocessor",
+  "bert_ner_wordsubword_mapper": "deeppavlov.models.preprocessors.bert_preprocessor:BertNerWordSubwordMapper",
   "bert_preprocessor": "deeppavlov.models.preprocessors.bert_preprocessor:BertPreprocessor",
   "bert_ranker": "deeppavlov.models.bert.bert_ranker:BertRankerModel",
   "bert_ranker_preprocessor": "deeppavlov.models.preprocessors.bert_preprocessor:BertRankerPreprocessor",

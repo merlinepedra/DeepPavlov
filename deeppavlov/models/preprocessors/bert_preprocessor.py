@@ -16,6 +16,8 @@ import random
 from logging import getLogger
 from typing import Tuple, List, Optional, Union
 
+import numpy as np
+
 from bert_dp.preprocessing import convert_examples_to_features, InputExample, InputFeatures
 from bert_dp.tokenization import FullTokenizer
 
@@ -212,6 +214,85 @@ class BertNerPreprocessor(Component):
         tags_subword.append('X')
         return tokens_subword, startofword_markers, tags_subword
 
+
+def match_subwords_to_tokenization(subtokens: List[str], tokens: List[str]):
+    token_index, position_in_token, after_unk = 0, 0, False
+    if len(subtokens) == 0:
+        return subtokens
+    if subtokens[0] == "[CLS]":
+        subtokens, new_subtokens = subtokens[1:], subtokens[:1]
+    for subtoken_index, subtoken in enumerate(subtokens):
+        if subtoken == '[SEP]':
+            new_subtokens.append(subtoken)
+            break
+        if token_index > len(tokens) or position_in_token > len(tokens[token_index]):
+            return None
+        if subtoken[:2] == "##":
+            subtoken = subtoken[2:]
+        if subtoken == '[UNK]':
+            after_unk = True
+        if after_unk:
+            new_subtokens.append(subtoken)
+            continue
+        if tokens[token_index][position_in_token:].lower().startswith(subtoken.lower()):
+            subtoken_to_append = subtoken if position_in_token == 0 else "##" + subtoken
+            new_subtokens.append(subtoken_to_append)
+            position_in_token += len(subtoken)
+            if position_in_token == len(tokens[token_index]):
+                token_index += 1
+                position_in_token = 0
+                after_unk = False
+        else:
+            return None
+    if token_index != len(tokens):
+        return None
+    return new_subtokens
+    
+
+@register('bert_ner_wordsubword_mapper')
+class BertNerWordSubwordMapper(Component):
+
+    def __init__(self, pad_value=0, cls_value=0, sep_value=0, **kwargs):
+        self.pad_value = pad_value
+        self.cls_value = cls_value
+        self.sep_value = sep_value
+
+    def __call__(self, word_data: List, subword_tokens: List[List[str]], 
+                 tokens: Optional[List[List[str]]]=None, max_length=None):
+        """
+        Propagates word-level information to its subwords.
+
+        word_data: word-level data for a batch of word sequences (each data)
+        subword_tokens: batch of subwords
+        """
+        if tokens is not None:
+            if max_length is None:
+                max_length = max(len(x) for x in subword_tokens if x is not None)
+            for i, curr_subwords in enumerate(subword_tokens):
+                new_subwords = match_subwords_to_tokenization(curr_subwords, tokens[i])
+                if new_subwords is not None:
+                    subword_tokens[i] = new_subwords
+                else:
+                    subword_tokens[i] = None
+        batch_size = len(subword_tokens)
+        tiling_shape = (batch_size, max_length) + np.shape(word_data[0][0])
+        answer = np.tile(self.pad_value, tiling_shape)
+        answer[:,0] = self.cls_value
+        for i, subtokens in enumerate(subword_tokens):
+            if subtokens is None:
+                continue
+            word_count = -1
+            for j, token in enumerate(subtokens[1:], 1):
+                # skipping [CLS] token
+                if token == "[SEP]":
+                    answer[i, j] = self.sep_value
+                    break
+                if token[:2] != "##":
+                    word_count += 1
+                answer[i, j] = word_data[i][word_count]
+            assert word_count == len(word_data[i]) - 1
+        return answer
+        
 
 @register('bert_ranker_preprocessor')
 class BertRankerPreprocessor(BertPreprocessor):
