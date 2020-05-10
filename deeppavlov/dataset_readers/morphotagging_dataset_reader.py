@@ -187,3 +187,41 @@ class MorphotaggerDatasetReader(DatasetReader):
 #                 kwargs["read_only_words"] = True
             data[mode] += read_infile(filepath, **kwargs)
         return data
+
+
+
+@register('morphotagger_multidataset_reader')
+class MorphotaggerMultiDatasetReader(DatasetReader):
+    """Class to read multiple training datasets in UD format"""
+
+    def read(self, data_path: List,
+             data_types: Optional[List[str]] = None,
+             languages: Optional[List[int]] = None,
+             params: Optional[dict] = None,
+             **kwargs) -> Dict[str, List]:
+        """Reads UD dataset from data_path.
+
+        Args:
+            data_path: 
+            data_types: which dataset parts among 'train', 'dev', 'test' are returned
+            dataset_indexes: 
+        Returns:
+            a dictionary containing dataset fragments (see ``read_infile``) for given data types
+        """
+        # main data
+        params = params or dict()
+        if data_types is None:
+            data_types = ["train", "dev", "test"]
+        if len(data_path) != len(data_types):
+            raise ValueError("The number of input files in data_path and data types "
+                             "in data_types must be equal")
+        if len(languages) != len(data_types):
+            raise ValueError("The number of entries in `data_path` and `languages` must be equal")
+        data = {mode: [] for mode in ["train", "valid", "test"]}
+        for i, (mode, index, filepath) in enumerate(zip(data_types, languages, data_path)):
+            if mode == "dev":
+                mode = "valid"
+            curr_kwargs = params[str(i)] if str(i) in params else dict()
+            curr_data = read_infile(filepath, **kwargs, **curr_kwargs)
+            data[mode].extend([((sent, index), tags) for sent, tags in curr_data])
+        return data
