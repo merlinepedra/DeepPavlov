@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import random
-from typing import Tuple, List, Dict, Any, Iterator
+from typing import Tuple, List, Dict, Any, Iterator, Optional
 
 import numpy as np
 
