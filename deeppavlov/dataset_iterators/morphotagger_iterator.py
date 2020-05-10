@@ -118,3 +118,69 @@ class MorphoTaggerDatasetIterator(DataLearningIterator):
                 yield indexes_to_yield, data_to_yield
             else:
                 yield data_to_yield
+
+
+@register('morphotagger_multidataset')
+class MorphoTaggerMultiDatasetIterator(DataLearningIterator):
+
+    def __init__(self, data: Dict[str, List[Tuple[Any, Any]]], seed: int = None,
+                 shuffle: bool = True, dataset_indexes: Optional[Dict] = None) -> None:
+        super().__init__(data, seed, shuffle)
+        self.dataset_indexes = dataset_indexes or dict()
+        self._initialize_dataset_indexes(data)
+        self.epoch = 0
+
+    def _initialize_dataset_indexes(self, data):
+        for mode, dataset in data.items():
+            for (x, language), y in dataset:
+                if language not in self.dataset_indexes:
+                    self.dataset_indexes = dict()
+                if "first_epoch" not in self.dataset_indexes[language]:
+                    self.dataset_indexes[language]["first_epoch"] = 0
+                if "last_epoch" not in self.dataset_indexes[language]:
+                    self.dataset_indexes[language]["last_epoch"] = -1
+        return
+
+    def gen_batches(self, batch_size: int, data_type: str = 'train',
+                    shuffle: bool = None, return_indexes: bool = False) -> Iterator[tuple]:
+        if shuffle is None:
+            shuffle = self.shuffle
+        data = self.data[data_type]
+        curr_indexes, curr_data = [], []
+        for i, ((x, language), y) in enumerate(data):
+            to_append = False
+            if data_type != "train": # == "test":
+                to_append = True
+            else:
+                first_epoch = self.dataset_indexes[language]["first_epoch"]
+                last_epoch = self.dataset_indexes[language]["last_epoch"]
+                # if data_type == "valid":
+                #     if first_epoch > 0:
+                #         first_epoch += 1
+                #     if last_epoch > 0:
+                #         last_epoch += 1
+                if self.epoch >= first_epoch and (self.epoch < last_epoch or last_epoch < 0):
+                    to_append = True
+            if to_append:
+                curr_indexes.append(i)
+                curr_data.append(((x, language), y))
+        lengths = [len(x[0]) for x in curr_data]
+        indexes = np.argsort(lengths)
+        L = len(curr_data)
+        if batch_size < 0:
+            batch_size = L
+        starts = list(range(0, L, batch_size))
+        if shuffle:
+            self.random.shuffle(starts)
+        print("{} instances for {} mode on {} epoch".format(L, data_type, self.epoch))
+        if data_type == "train":
+            print("Current epoch: {}".format(self.epoch))
+            self.epoch += 1
+        for start in starts:
+            indexes_to_yield = indexes[start:start + batch_size]
+            data_to_yield = tuple(list(x) for x in zip(*([curr_data[i] for i in indexes_to_yield])))
+            if return_indexes:
+                indexes_to_yield = [curr_indexes[i] for i in indexes_to_yield]
+                yield indexes_to_yield, data_to_yield
+            else:
+                yield data_to_yield
