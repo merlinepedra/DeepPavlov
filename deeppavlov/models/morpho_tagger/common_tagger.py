@@ -13,11 +13,13 @@
 # limitations under the License.
 
 """File containing common operation with keras.backend objects"""
+import ujson as json
 
 from deeppavlov.core.common.registry import register
 from deeppavlov.core.models.component import Component
+from deeppavlov.core.models.estimator import Estimator
 
-from typing import Union, Optional, Tuple
+from typing import Union, Optional, Tuple, List
 
 from tensorflow.keras import backend as K
 import numpy as np
@@ -98,11 +100,11 @@ def _are_equal_pos(first, second):
                                    for parts in [NOUNS, VERBS, CONJ]))
 
 
-IDLE_FEATURES = {"Voice", "Animacy", "Degree", "Mood", "VerbForm"}
+IDLE_FEATURES = {"Voice", "Animacy", "Degree", "Mood", "VerbForm", "PronType", "Strength"}
 
 
 def get_tag_distance(first, second, first_sep=",", second_sep=" ",
-                     idle_features=None):
+                     idle_features=None, pos_diff_weight=2):
     """
     Measures the distance between two (Russian) morphological tags in UD Format.
     The first tag is usually the one predicted by our model (therefore it uses comma
@@ -122,7 +124,7 @@ def get_tag_distance(first, second, first_sep=",", second_sep=" ",
         idle_features = IDLE_FEATURES
     first_pos, first_feats = make_pos_and_tag(first, sep=first_sep, return_mode="dict")
     second_pos, second_feats = make_pos_and_tag(second, sep=second_sep, return_mode="dict")
-    dist = int(not _are_equal_pos(first_pos, second_pos))
+    dist = int(not _are_equal_pos(first_pos, second_pos)) * pos_diff_weight
     for key, value in first_feats.items():
         other = second_feats.get(key)
         if other is None:
@@ -133,16 +135,22 @@ def get_tag_distance(first, second, first_sep=",", second_sep=" ",
         dist += int(key not in first_feats and key not in idle_features)
     return dist
 
+
 @register("tag_normalizer")
 class TagNormalizer(Estimator):
 
-    def __init__(self, basic_language: Union[int, str] = 0, idle_features: Optional[List[str]] = None, 
-                 save_path: Optional[str] = None, load_path: Optional[str] = None, *args, **kwargs):
+    def __init__(self, basic_language: Union[int, str] = 0,
+                 pos_diff_weight: int = 2, 
+                 idle_features: Optional[List[str]] = None, 
+                 save_path: Optional[str] = None, 
+                 load_path: Optional[str] = None, 
+                 *args, **kwargs):
         self.basic_language = basic_language
+        self.pos_diff_weight = pos_diff_weight
         self.basic_tags = set()
         self.basic_pos = set()
         self.tag_mapping = dict()
-        self.idle_features = idle_features or []
+        self.idle_features = idle_features if idle_features is not None else IDLE_FEATURES
         self.save_path = save_path
         self.load_path = load_path
 
@@ -151,7 +159,7 @@ class TagNormalizer(Estimator):
             answer = {"basic_tags": list(self.basic_tags), "basic_pos": list(self.basic_pos),
                       "tag_mapping": self.tag_mapping, "idle_features": self.idle_features}
             with open(self.save_path, "w", encoding="utf8") as fout:
-                json.dump(answer, fout)
+                json.dump(answer, fout, indent=2)
 
     def load(self, *args, **kwargs):
         if self.load_path:
@@ -164,11 +172,17 @@ class TagNormalizer(Estimator):
 
     def fit(self, tag_sents, languages):
         for tag_sent, language_index in zip(tag_sents, languages):
-            for tag in tag_sent:
-                if language_index == self.basic_language:
+            if language_index == self.basic_language:
+                for tag in tag_sent:
                     self.basic_tags.add(tag)
                     pos = tag.split(",")[0]
                     self.basic_pos.add(pos)
+        for tag_sent, language_index in zip(tag_sents, languages):
+            if language_index != self.basic_language:
+                for tag in tag_sent:
+                    if tag not in self.tag_mapping:
+                        self.tag_mapping[tag] = self._find_closest_tag(tag)
+        self.save()
         return
 
     def _find_closest_tag(self, tag):
@@ -179,10 +193,12 @@ class TagNormalizer(Estimator):
             return pos
         best_dist, best_tag = np.inf, None
         for basic_tag in self.basic_tags:
-            dist = get_tag_distance(basic_tag, tag, first_sep=",", second_sep=",", idle_features=self.idle_features)
+            dist = get_tag_distance(basic_tag, tag, first_sep=",", second_sep=",", 
+                                    idle_features=self.idle_features,
+                                    pos_diff_weight=self.pos_diff_weight)
             if dist < best_dist:
                 best_dist, best_tag = dist, basic_tag
-        return basic_tag
+        return best_tag
 
     def __call__(self, tag_sents, languages=None):
         if languages is None:

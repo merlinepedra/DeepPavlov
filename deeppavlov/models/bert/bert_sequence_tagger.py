@@ -221,6 +221,9 @@ class BertSequenceNetwork(LRScheduledTFModel):
                          load_before_drop=load_before_drop,
                          clip_norm=clip_norm,
                          **kwargs)
+        # we need bert_config during initialization
+        self.bert_config = BertConfig.from_json_file(str(expand_path(bert_config_file)))
+
         self.keep_prob = keep_prob
         self.encoder_layer_ids = encoder_layer_ids
         self.encoder_dropout = encoder_dropout
@@ -234,8 +237,6 @@ class BertSequenceNetwork(LRScheduledTFModel):
         self.freeze_embeddings = freeze_embeddings
         self.bert_learning_rate_multiplier = bert_learning_rate / learning_rate
         self.min_learning_rate = min_learning_rate
-
-        self.bert_config = BertConfig.from_json_file(str(expand_path(bert_config_file)))
 
         if attention_probs_keep_prob is not None:
             self.bert_config.attention_probs_dropout_prob = 1.0 - attention_probs_keep_prob
@@ -277,24 +278,37 @@ class BertSequenceNetwork(LRScheduledTFModel):
         self.additional_inputs_number = len(self.additional_inputs_dim)
         # input mode
         self.additional_inputs_mode = additional_inputs_mode
+        if not isinstance(additional_inputs_mode, list):
+            self.additional_inputs_mode = [additional_inputs_mode] * self.additional_inputs_number
+        if len(self.additional_inputs_mode) != self.additional_inputs_number:
+            raise ValueError("The length of 'self.additional_inputs_mode' "
+                             "must be equal to the number of additional_inputs")
+        # self.additional_inputs_to_add = [i for i, mode in self.additional_inputs_mode if mode == 'add']
+        # self.additional_inputs_to_concat = [i for i, mode in self.additional_inputs_mode if mode != 'add']
         # whether inputs are indexes
-        if not isinstance(are_additional_inputs_indexes, List):
+        if not isinstance(are_additional_inputs_indexes, list):
             self.are_additional_inputs_indexes = [are_additional_inputs_indexes] * self.additional_inputs_number
         if len(self.are_additional_inputs_indexes) != self.additional_inputs_number:
             raise ValueError("The length of 'self.are_additional_inputs_indexes' "
                              "must be equal to the number of additional_inputs")
         # additional_embeddings
-        if not isinstance(additional_embeddings_dim, List):
+        if not isinstance(additional_embeddings_dim, list):
             self.additional_embeddings_dim = [additional_embeddings_dim] * self.additional_inputs_number
         if len(self.additional_embeddings_dim) != self.additional_inputs_number:
             raise ValueError("The number of addiitional embeddings must be equal "
                              "to the number of additional_inputs")
-        if not isinstance(additional_activations, List):
+        for i, mode in enumerate(self.additional_inputs_mode):
+            if mode == "add":
+                output_dim = self.additional_inputs_dim[i]
+                if self.additional_embeddings_dim[i] is not None:
+                    output_dim = self.additional_embeddings_dim[i]
+                assert output_dim == self.bert_config.hidden_size
+        if not isinstance(additional_activations, list):
             self.additional_activations = [additional_activations] * self.additional_inputs_number
         if len(self.additional_activations) != self.additional_inputs_number:
             raise ValueError("The number of addiitional activations must be equal "
                              "to the number of additional_inputs")
-        if not isinstance(additional_inputs_dropout, List):
+        if not isinstance(additional_inputs_dropout, list):
             self.additional_inputs_dropout = [additional_inputs_dropout] * self.additional_inputs_number
         if len(self.additional_inputs_dropout) != self.additional_inputs_number:
             raise ValueError("The number of addiitional dropout rates must be equal "
@@ -303,11 +317,35 @@ class BertSequenceNetwork(LRScheduledTFModel):
     def _init_graph(self) -> None:
         self.seq_lengths = tf.reduce_sum(self.y_masks_ph, axis=1)
 
+        additional_bert_inputs = None
+        if self.additional_inputs_number > 0:
+            with tf.variable_scope('ner/additional_inputs'):
+                additional_embeddings = list(self.additional_inputs_ph)
+                for i, curr_units in enumerate(self.additional_inputs_ph):
+                    is_index = self.are_additional_inputs_indexes[i]
+                    input_dim = self.additional_inputs_dim[i]
+                    output_dim = self.additional_embeddings_dim[i]
+                    activation = self.additional_activations[i]
+                    if is_index:
+                        curr_units = tf.one_hot(curr_units, depth=input_dim)
+                    if output_dim is not None:
+                        curr_units = tf.keras.layers.Dense(output_dim, activation=activation)(curr_units)
+                        keep_prob = self.additional_keep_prob_ph[i]
+                    else:
+                        output_dim = input_dim
+                    additional_embeddings[i] = tf.nn.dropout(curr_units, keep_prob=keep_prob)
+                    if self.additional_inputs_mode[i] == "add":
+                        if additional_bert_inputs is not None:
+                            additional_bert_inputs += additional_embeddings[i]
+                        else:
+                            additional_bert_inputs = additional_embeddings[i]
+
         self.bert = BertModel(config=self.bert_config,
                               is_training=self.is_train_ph,
                               input_ids=self.input_ids_ph,
                               input_mask=self.input_masks_ph,
                               token_type_ids=self.token_types_ph,
+                              additional_features=additional_bert_inputs,
                               use_one_hot_embeddings=False)
 
         with tf.variable_scope('ner'):
@@ -325,21 +363,10 @@ class BertSequenceNetwork(LRScheduledTFModel):
             units = sum(w * l for w, l in zip(layer_weights, self.encoder_layers()))
             units = tf.nn.dropout(units, keep_prob=self.keep_prob_ph)
 
-        if self.additional_inputs_number > 0:
-            with tf.variable_scope('ner/additional_inputs'):
-                additional_embeddings = list(self.additional_inputs_ph)
-                for i, curr_units in enumerate(self.additional_inputs_ph):
-                    is_index = self.are_additional_inputs_indexes[i]
-                    input_dim = self.additional_inputs_dim[i]
-                    output_dim = self.additional_embeddings_dim[i]
-                    activation = self.additional_activations[i]
-                    if is_index:
-                        curr_units = tf.one_hot(curr_units, depth=input_dim)
-                    if output_dim is not None:
-                        curr_units = tf.keras.layers.Dense(output_dim, activation=activation)(curr_units)
-                    keep_prob = self.additional_keep_prob_ph[i]
-                    additional_embeddings[i] = tf.nn.dropout(curr_units, keep_prob=keep_prob)
-                units = tf.concat([units] + additional_embeddings, -1)
+        with tf.variable_scope('ner/additional_inputs'):
+            for i, mode in enumerate(self.additional_inputs_mode):
+                if mode == "concat":
+                    units = tf.concat([units] + additional_embeddings[i], -1)
         return units
 
     def _get_tag_mask(self) -> tf.Tensor:

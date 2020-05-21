@@ -107,6 +107,28 @@ def read_infile(infile: Union[Path, str], *, from_words=False,
     return answer
 
 
+def read_infile_to_raw(infile):
+    answer = []
+    with open(infile, "r", encoding="utf8") as fin:
+        sent = []
+        for line in fin:
+            line = line.strip()
+            if line == "":
+                if len(sent) > 0:
+                    answer.append(sent)
+                sent = []
+                continue
+            if line[0] == "#":
+                continue
+            splitted = line.split("\t")
+            if len(splitted) != 10 or not splitted[0].isdigit():
+                continue
+            sent.append(splitted)
+    if len(sent) > 0:
+        answer.append(sent)
+    return answer
+
+
 @register('morphotagger_dataset_reader')
 class MorphotaggerDatasetReader(DatasetReader):
     """Class to read training datasets in UD format"""
