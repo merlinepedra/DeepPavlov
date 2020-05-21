@@ -11,12 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import random
 import re
+import random
 from logging import getLogger
 from typing import Tuple, List, Optional, Union
 
-import numpy as np
 from bert_dp.preprocessing import convert_examples_to_features, InputExample, InputFeatures
 from bert_dp.tokenization import FullTokenizer
 
@@ -24,6 +23,7 @@ from deeppavlov.core.commands.utils import expand_path
 from deeppavlov.core.common.registry import register
 from deeppavlov.core.data.utils import zero_pad
 from deeppavlov.core.models.component import Component
+from deeppavlov.models.preprocessors.mask import Mask
 
 log = getLogger(__name__)
 
@@ -32,7 +32,7 @@ log = getLogger(__name__)
 class BertPreprocessor(Component):
     """Tokenize text on subtokens, encode subtokens with their indices, create tokens and segment masks.
 
-    Check details in convert_examples_to_features function.
+    Check details in :func:`bert_dp.preprocessing.convert_examples_to_features` function.
 
     Args:
         vocab_file: path to vocabulary
@@ -55,7 +55,7 @@ class BertPreprocessor(Component):
                                        do_lower_case=do_lower_case)
 
     def __call__(self, texts_a: List[str], texts_b: Optional[List[str]] = None) -> List[InputFeatures]:
-        """Call Bert convert_examples_to_features function to tokenize and create masks.
+        """Call Bert :func:`bert_dp.preprocessing.convert_examples_to_features` function to tokenize and create masks.
 
         texts_a and texts_b are separated by [SEP] token
 
@@ -64,7 +64,7 @@ class BertPreprocessor(Component):
             texts_b: list of texts, it could be None, e.g. single sentence classification task
 
         Returns:
-            batch of InputFeatures with subtokens, subtoken ids, subtoken mask, segment mask.
+            batch of :class:`bert_dp.preprocessing.InputFeatures` with subtokens, subtoken ids, subtoken mask, segment mask.
 
         """
 
@@ -79,7 +79,7 @@ class BertPreprocessor(Component):
 @register('bert_ner_preprocessor')
 class BertNerPreprocessor(Component):
     """Takes tokens and splits them into bert subtokens, encodes subtokens with their indices.
-    Creates the mask of subtokens (one for the first subtoken, zero for the others).
+    Creates a mask of subtokens (one for the first subtoken, zero for the others).
 
     If tags are provided, calculates tags for subtokens.
 
@@ -126,88 +126,91 @@ class BertNerPreprocessor(Component):
                  **kwargs):
         if isinstance(tokens[0], str):
             tokens = [re.findall(self._re_tokenizer, s) for s in tokens]
-        subword_tokens, subword_tok_ids, subword_masks, subword_tags = [], [], [], []
+        subword_tokens, subword_tok_ids, startofword_markers, subword_tags = [], [], [], []
         for i in range(len(tokens)):
             toks = tokens[i]
             ys = ['O'] * len(toks) if tags is None else tags[i]
-            mask = [int(y != 'X') for y in ys]
-            assert len(toks) == len(ys) == len(mask), \
-                f"toks({len(toks)}) should have the same length as " \
-                f" ys({len(ys)}) and mask({len(mask)}), tokens = {toks}."
-            sw_toks, sw_mask, sw_ys = self._ner_bert_tokenize(toks,
-                                                              mask,
-                                                              ys,
-                                                              self.tokenizer,
-                                                              self.max_subword_length,
-                                                              mode=self.mode,
-                                                              subword_mask_mode=self.subword_mask_mode,
-                                                              token_masking_prob=self.token_masking_prob)
+            assert len(toks) == len(ys), \
+                f"toks({len(toks)}) should have the same length as ys({len(ys)})"
+            sw_toks, sw_marker, sw_ys = \
+                self._ner_bert_tokenize(toks,
+                                        ys,
+                                        self.tokenizer,
+                                        self.max_subword_length,
+                                        mode=self.mode,
+                                        subword_mask_mode=self.subword_mask_mode,
+                                        token_masking_prob=self.token_masking_prob)
             if self.max_seq_length is not None:
                 if len(sw_toks) > self.max_seq_length:
                     raise RuntimeError(f"input sequence after bert tokenization"
                                        f" shouldn't exceed {self.max_seq_length} tokens.")
             subword_tokens.append(sw_toks)
             subword_tok_ids.append(self.tokenizer.convert_tokens_to_ids(sw_toks))
-            subword_masks.append(sw_mask)
+            startofword_markers.append(sw_marker)
             subword_tags.append(sw_ys)
-            assert len(sw_mask) == len(sw_toks) == len(subword_tok_ids[-1]) == len(sw_ys), \
-                f"length of mask({len(sw_mask)}), tokens({len(sw_toks)})," \
+            assert len(sw_marker) == len(sw_toks) == len(subword_tok_ids[-1]) == len(sw_ys), \
+                f"length of sow_marker({len(sw_marker)}), tokens({len(sw_toks)})," \
                 f" token ids({len(subword_tok_ids[-1])}) and ys({len(ys)})" \
                 f" for tokens = `{toks}` should match"
         subword_tok_ids = zero_pad(subword_tok_ids, dtype=int, padding=0)
-        subword_masks = zero_pad(subword_masks, dtype=int, padding=0)
+        startofword_markers = zero_pad(startofword_markers, dtype=int, padding=0)
+        attention_mask = Mask()(subword_tokens)
+
         if tags is not None:
             if self.provide_subword_tags:
-                return tokens, subword_tokens, subword_tok_ids, subword_masks, subword_tags
+                return tokens, subword_tokens, subword_tok_ids, \
+                    attention_mask, startofword_markers, subword_tags
             else:
                 nonmasked_tags = [[t for t in ts if t != 'X'] for ts in tags]
                 for swts, swids, swms, ts in zip(subword_tokens,
                                                  subword_tok_ids,
-                                                 subword_masks,
+                                                 startofword_markers,
                                                  nonmasked_tags):
                     if (len(swids) != len(swms)) or (len(ts) != sum(swms)):
                         log.warning('Not matching lengths of the tokenization!')
                         log.warning(f'Tokens len: {len(swts)}\n Tokens: {swts}')
-                        log.warning(f'Masks len: {len(swms)}, sum: {sum(swms)}')
+                        log.warning(f'Markers len: {len(swms)}, sum: {sum(swms)}')
                         log.warning(f'Masks: {swms}')
                         log.warning(f'Tags len: {len(ts)}\n Tags: {ts}')
-                return tokens, subword_tokens, subword_tok_ids, subword_masks, nonmasked_tags
-        return tokens, subword_tokens, subword_tok_ids, subword_masks
+                return tokens, subword_tokens, subword_tok_ids, \
+                    attention_mask, startofword_markers, nonmasked_tags
+        return tokens, subword_tokens, subword_tok_ids, startofword_markers, attention_mask
 
     @staticmethod
     def _ner_bert_tokenize(tokens: List[str],
-                           mask: List[int],
                            tags: List[str],
                            tokenizer: FullTokenizer,
                            max_subword_len: int = None,
                            mode: str = None,
                            subword_mask_mode: str = "first",
-                           token_masking_prob: float = 0.0) -> Tuple[List[str], List[int], List[str]]:
+                           token_masking_prob: float = None) -> Tuple[List[str], List[int], List[str]]:
+        do_masking = (mode == 'train') and (token_masking_prob is not None)
+        do_cutting = (max_subword_len is not None)
         tokens_subword = ['[CLS]']
-        mask_subword = [0]
+        startofword_markers = [0]
         tags_subword = ['X']
-        for token, flag, tag in zip(tokens, mask, tags):
+        for token, tag in zip(tokens, tags):
+            token_marker = int(tag != 'X')
             subwords = tokenizer.tokenize(token)
-            if not subwords or \
-                    ((max_subword_len is not None) and (len(subwords) > max_subword_len)):
+            if not subwords or (do_cutting and (len(subwords) > max_subword_len)):
                 tokens_subword.append('[UNK]')
-                mask_subword.append(flag)
+                startofword_markers.append(token_marker)
                 tags_subword.append(tag)
             else:
-                if mode == 'train' and token_masking_prob > 0.0 and np.random.rand() < token_masking_prob:
+                if do_masking and (random.random() < token_masking_prob):
                     tokens_subword.extend(['[MASK]'] * len(subwords))
                 else:
                     tokens_subword.extend(subwords)
                 if subword_mask_mode == "last":
-                    mask_subword.extend([0] * (len(subwords) - 1) + [flag])
+                    startofword_markers.extend([0] * (len(subwords) - 1) + [token_marker])
                 else:
-                    mask_subword.extend([flag] + [0] * (len(subwords) - 1))
+                    startofword_markers.extend([token_marker] + [0] * (len(subwords) - 1))
                 tags_subword.extend([tag] + ['X'] * (len(subwords) - 1))
 
         tokens_subword.append('[SEP]')
-        mask_subword.append(0)
+        startofword_markers.append(0)
         tags_subword.append('X')
-        return tokens_subword, mask_subword, tags_subword
+        return tokens_subword, startofword_markers, tags_subword
 
 
 @register('bert_ranker_preprocessor')
@@ -218,7 +221,7 @@ class BertRankerPreprocessor(BertPreprocessor):
     """
 
     def __call__(self, batch: List[List[str]]) -> List[List[InputFeatures]]:
-        """Call BERT convert_examples_to_features function to tokenize and create masks.
+        """Call BERT :func:`bert_dp.preprocessing.convert_examples_to_features` function to tokenize and create masks.
 
         Args:
             batch: list of elemenents where the first element represents the batch with contexts
@@ -260,7 +263,7 @@ class BertSepRankerPreprocessor(BertPreprocessor):
     """
 
     def __call__(self, batch: List[List[str]]) -> List[List[InputFeatures]]:
-        """Call BERT convert_examples_to_features function to tokenize and create masks.
+        """Call BERT :func:`bert_dp.preprocessing.convert_examples_to_features` function to tokenize and create masks.
 
         Args:
             batch: list of elemenents where the first element represents the batch with contexts
@@ -301,9 +304,9 @@ class BertSepRankerPredictorPreprocessor(BertSepRankerPreprocessor):
 
     Args:
         resps: list of strings containing the base of text responses
-        resp_vecs: BERT vector respresentations of `resps`, if is `None` features for the response base will be build
+        resp_vecs: BERT vector respresentations of ``resps``, if is ``None`` features for the response base will be build
         conts: list of strings containing the base of text contexts
-        cont_vecs: BERT vector respresentations of `conts`, if is `None` features for the response base will be build
+        cont_vecs: BERT vector respresentations of ``conts``, if is ``None`` features for the response base will be build
     """
 
     def __init__(self,

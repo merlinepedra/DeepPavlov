@@ -10,12 +10,15 @@
         "out": ["tokens"]
       },
       {
+        "id": "main",
         "class_name": "elmo_bilm",
-        "mini_batch_size": 32,
+        "mini_batch_size": 4,
+        "single_pass": true,
+        "init_states_before_all": false,
         "in": [
           "tokens"
         ],
-        "model_dir": "bidirectional_lms/elmo_ru_news",
+        "model_dir": "{DOWNLOADS_PATH}/bidirectional_lms/elmo_ru_news",
         "out": [
           "pred_tokens"
         ]
@@ -26,14 +29,20 @@
     ]
   },
   "metadata": {
+    "variables": {
+      "ROOT_PATH": "~/.deeppavlov",
+      "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
+      "MODELS_PATH": "{ROOT_PATH}/models",
+      "RESULTS_PATH": "{ROOT_PATH}/results"
+    },
     "requirements": [
-      "../dp_requirements/tf.txt",
-      "../dp_requirements/elmo.txt"
+      "{DEEPPAVLOV_PATH}/requirements/tf-hub.txt",
+      "{DEEPPAVLOV_PATH}/requirements/elmo.txt"
     ],
     "download": [
       {
         "url": "http://files.deeppavlov.ai/deeppavlov_data/lm_elmo_ru_news.tar.gz",
-        "subdir": "bidirectional_lms/"
+        "subdir": "{DOWNLOADS_PATH}/bidirectional_lms/"
       }
     ]
   }

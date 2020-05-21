@@ -12,21 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 from abc import abstractmethod
-from copy import deepcopy
 from logging import getLogger
-from typing import Optional, List, Union
 
-import numpy as np
-import tensorflow as tf
-from keras import backend as K
+import tensorflow.compat.v1 as tf
+from tensorflow.keras import backend as K
 from overrides import overrides
 
+from deeppavlov.core.models.lr_scheduled_model import LRScheduledModel
 from deeppavlov.core.models.nn_model import NNModel
 from deeppavlov.core.models.tf_backend import TfModelMeta
-from deeppavlov.core.models.lr_scheduled_model import LRScheduledModel
-
 
 log = getLogger(__name__)
 
@@ -47,7 +42,7 @@ class KerasModel(NNModel, metaclass=TfModelMeta):
         Initialize model using keyword parameters
 
         Args:
-            kwargs (dict): Dictionary with model parameters
+            kwargs: Dictionary with model parameters
         """
         self.epochs_done = 0
         self.batches_seen = 0
@@ -101,6 +96,7 @@ class LRScheduledKerasModel(LRScheduledModel, KerasModel):
     KerasModel enhanced with optimizer, learning rate and momentum
     management and search.
     """
+
     def __init__(self, **kwargs):
         """
         Initialize model with given parameters
@@ -108,19 +104,15 @@ class LRScheduledKerasModel(LRScheduledModel, KerasModel):
         Args:
             **kwargs: dictionary of parameters
         """
-        if isinstance(kwargs.get("learning_rate"), float) and isinstance(kwargs.get("learning_rate_decay"), float):
-            KerasModel.__init__(self, **kwargs)
-        else:
-            KerasModel.__init__(self, **kwargs)
+        self.opt = kwargs
+        KerasModel.__init__(self, **kwargs)
+        if not(isinstance(kwargs.get("learning_rate"), float) and isinstance(kwargs.get("learning_rate_decay"), float)):
             LRScheduledModel.__init__(self, **kwargs)
 
     @abstractmethod
     def get_optimizer(self):
         """
-        Return instance of keras optimizer
-
-        Args:
-            None
+        Return an instance of keras optimizer
         """
         pass
 

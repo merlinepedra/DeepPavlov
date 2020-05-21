@@ -1,3 +1,17 @@
+# Copyright 2017 Neural Networks and Deep Learning lab, MIPT
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from abc import abstractmethod
 from typing import List, Optional
 
@@ -5,9 +19,9 @@ import numpy as np
 from pymorphy2 import MorphAnalyzer
 from russian_tagsets import converters
 
-from deeppavlov.core.models.serializable import Serializable
 from deeppavlov.core.common.registry import register
-from deeppavlov.models.morpho_tagger.common_tagger import get_tag_distance
+from deeppavlov.core.models.serializable import Serializable
+from deeppavlov.models.morpho_tagger.common_tagger import get_tag_distance, make_full_UD_tag, make_pos_and_tag
 
 
 class BasicLemmatizer(Serializable):
@@ -63,13 +77,50 @@ class UDPymorphyLemmatizer(BasicLemmatizer):
     Lemma is selected from one of PyMorphy parses,
     the parse whose tag resembles the most a known UD tag is chosen.
     """
+
     def __init__(self, save_path: Optional[str] = None, load_path: Optional[str] = None,
-                 transform_lemmas=False, **kwargs) -> None:
+                 transform_lemmas=False, check_proper_nouns=False, **kwargs) -> None:
         self.transform_lemmas = transform_lemmas
+        self.check_proper_nouns = check_proper_nouns
         self._reset()
         self.analyzer = MorphAnalyzer()
         self.converter = converters.converter("opencorpora-int", "ud20")
         super().__init__(save_path, load_path, **kwargs)
+
+    def _process_lemma(self, lemma, tag, word, pymorphy_parse=None):
+        lemma = lemma.replace("ё", "е")
+        _, feats = make_pos_and_tag(tag, sep=",", return_mode="dict")
+        if pymorphy_parse is not None and "Surn" in pymorphy_parse.tag:
+            # баг с фамилиями
+            for elem in pymorphy_parse.lexeme:
+                curr_tag, curr_lemma = self.converter(str(elem.tag)), elem.word
+                if elem.tag.case == "nomn":
+                    _, nom_feats = make_pos_and_tag(curr_tag, sep=" ", return_mode="dict")
+                    if feats.get("Gender") == nom_feats.get("Gender") and feats.get("Number") == nom_feats.get("Number"):
+                        lemma = curr_lemma
+                        break
+        for suffix in ["ович", "евич", "овна", "евна"]:
+            if word.lower().startswith(lemma + suffix):
+                lemma += suffix
+                break
+            elif word.lower().startswith(lemma[:-1] + suffix):
+                lemma = lemma[:-1] + suffix
+                break
+            elif word.lower().startswith(lemma[:-2] + suffix):
+                lemma = lemma[:-2] + suffix
+                break
+        else:
+            if feats.get("Case") == "Nom" and word[0].isupper():
+                for suffix in ["ов", "ев"]:
+                    if word.lower().startswith(lemma + suffix):
+                        lemma += suffix
+                        break
+        if "PROPN" in tag:
+            if word.isupper():
+                lemma = lemma.upper()
+            elif word[0].isupper():
+                lemma = lemma[0].upper() + lemma[1:]
+        return lemma
 
     def save(self, *args, **kwargs):
         pass
@@ -90,8 +141,91 @@ class UDPymorphyLemmatizer(BasicLemmatizer):
             curr_tag, curr_lemma = self.converter(str(parse.tag)), parse.normal_form
             distance = get_tag_distance(tag, curr_tag)
             if distance < best_distance:
-                best_lemma, best_distance = curr_lemma, distance
+                best_lemma, best_parse, best_distance = curr_lemma, parse, distance
                 if distance == 0:
                     break
+        # if word.isupper() and len(word) > 1:
+        #     best_lemma = best_lemma.upper()
+        # elif word[0].isupper():
+        #     best_lemma = best_lemma[0].upper() + best_lemma[1:]
+        best_lemma = self._process_lemma(best_lemma, tag, word, pymorphy_parse=best_parse)
         self.memo[(word, tag)] = best_lemma
         return best_lemma
+
+NUM_MAPPING = {"пять": "пятый", "четыре": "четвертый", "шесть": "шестой", "десять": "десятый"}
+
+@register("morphorueval_lemmatizer")
+class MorphoRuEvalLemmatizer(UDPymorphyLemmatizer):
+
+    LETTERS_TO_REPLACE = {"ѣ": "е", "і": "и", "Ѳ": "Ф", "ꙋ": "у"}
+    OLD_MAPPINGS = {"человек": "человѣкъ", "велеть": "велѣти", "лес": "лѣсъ"}
+
+    def __init__(self, is_old=False, *args, **kwargs):
+        self.is_old = is_old
+        super().__init__(*args, **kwargs)
+        
+    def _process_lemma(self, lemma, tag, word, pymorphy_parse=None):
+        pos, feats = make_pos_and_tag(tag, return_mode="dict")
+        # числительные
+        if lemma == "два" and word.lower().startswith("втор"):
+            lemma = "второй"
+        elif lemma == "три" and word.lower().startswith("трет"):
+            lemma = "третий" 
+        elif lemma == "один" and word.lower().startswith("перв"):
+            lemma = "первый"
+        elif lemma in NUM_MAPPING and "ADJ" in tag:
+            lemma = NUM_MAPPING[lemma]
+        # предлоги
+        elif word in ["об", "во", "со"] and "ADP" in tag:
+            lemma = word
+        # сокращения
+        elif lemma in ["г.", "гг.", "г", "гг"] and not self.is_old:
+            lemma = "год"
+        elif word in ["км", "см"]:
+            lemma = word
+        # местоимения
+        elif lemma == "тот" and "Neut" in tag and "PRON" in tag:
+            lemma = "то"
+        elif lemma in ["основный"]:
+            lemma = "основной"
+        # %
+        elif word == "%":
+            lemma = "процент-знак"
+        # наречия
+        elif word == "надо" and ("ADV" in tag or "VERB" in tag):
+            lemma = "надо"
+        lemma = UDPymorphyLemmatizer._process_lemma(self, lemma, tag, word, pymorphy_parse=pymorphy_parse)
+        if self.is_old:
+            if lemma in self.OLD_MAPPINGS:
+                return self.OLD_MAPPINGS[lemma]
+            if word in ["г", "г."]:
+                lemma = "государь"
+            if word in ["x."]:
+                lemma = "холопъ"
+            if word in ["т."]:
+                lemma = "твой"
+            if pos == "VERB" and lemma[-2:] == "ть":
+                lemma = lemma[:-2] + "ти"
+                if lemma.endswith("тити") and not word.endswith("тити"):
+                    for x in ["платити", "пустити", "чистити"]:
+                        if lemma.endswith(x):
+                            break
+                    else:
+                        lemma = lemma[:-2]
+            if pos in ["NOUN", "PROPN", "PRON", "DET", "ADP"]:
+                if lemma[-1] in "бвгдзклмнпрстфхж":
+                    lemma += "ъ"
+                elif lemma[-1] in "чшщ" or lemma == "отец":
+                    lemma += "ь"
+            d = 0
+            for i, (x, y) in enumerate(zip(lemma, word)):
+                if y != x and y != self.LETTERS_TO_REPLACE.get(x, x):
+                    d = i-1
+                    break
+            else:
+                d = min(len(lemma), len(word))
+            if d >= 0:
+                lemma = word[:d] + lemma[d:]
+        if lemma == "" or (word[-1] == "ъ" and lemma[-1] != "ъ"):
+            lemma += "ъ"
+        return lemma

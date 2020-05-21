@@ -6,6 +6,8 @@ deeppavlov.models.morpho_tagger
 
     .. automethod:: __call__
 
+.. autofunction:: deeppavlov.models.morpho_tagger.common.call_model
+
 .. autofunction:: deeppavlov.models.morpho_tagger.common.predict_with_model
 
 .. autoclass:: deeppavlov.models.morpho_tagger.lemmatizer.UDPymorphyLemmatizer

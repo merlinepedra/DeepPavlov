@@ -52,7 +52,7 @@ class NNTrainer(FitTrainer):
         train_metrics: metrics calculated for train logs (if omitted, ``metrics`` argument is used)
         metric_optimization: one of ``'maximize'`` or ``'minimize'`` — strategy for metric optimization used in early
             stopping (default is ``'maximize'``)
-        evaluation_targets: data types on which to evaluate trained pipeline (default is ``('valid', 'test')``)
+        evaluation_targets: data types on which to evaluate a trained pipeline (default is ``('valid', 'test')``)
         show_examples: a flag used to print inputs, expected outputs and predicted outputs for the last batch
             in evaluation logs (default is ``False``)
         tensorboard_log_dir: path to a directory where tensorboard logs can be stored, ignored if None
@@ -73,7 +73,21 @@ class NNTrainer(FitTrainer):
         max_test_batches: maximum batches count for pipeline testing and evaluation, overrides ``log_on_k_batches``,
             ignored if negative (default is ``-1``)
         **kwargs: additional parameters whose names will be logged but otherwise ignored
+
+
+    Trainer saves the model if it sees progress in scores. The full rules look like following:
+
+    - For the validation savepoint:
+        * 0-th validation (optional). Don't save model, establish a baseline.
+        * 1-th validation.
+             + If we have a baseline, save the model if we see an improvement, don't save otherwise.
+             + If we don't have a baseline, save the model.
+        * 2nd and later validations. Save the model if we see an improvement
+    - For the at-train-exit savepoint:
+        * Save the model if it happened before 1st validation (to capture early training results), don't save otherwise.
+
     """
+
     def __init__(self, chainer_config: dict, *, batch_size: int = 1,
                  epochs: int = -1,
                  start_epoch_num: int = 0,
@@ -88,6 +102,7 @@ class NNTrainer(FitTrainer):
                  validate_first: bool = True,
                  validation_patience: int = 5, val_every_n_epochs: int = -1, val_every_n_batches: int = -1,
                  log_every_n_batches: int = -1, log_every_n_epochs: int = -1, log_on_k_batches: int = 1,
+                 save_every_n_epochs: int = -1, save_every_n_batches: int = -1,
                  **kwargs) -> None:
         super().__init__(chainer_config, batch_size=batch_size, metrics=metrics, evaluation_targets=evaluation_targets,
                          show_examples=show_examples, tensorboard_log_dir=tensorboard_log_dir,
@@ -98,22 +113,29 @@ class NNTrainer(FitTrainer):
             self.train_metrics = parse_metrics(train_metrics, self._chainer.in_y, self._chainer.out_params)
 
         metric_optimization = metric_optimization.strip().lower()
+        self.score_best = None
+
+        def _improved(op):
+            return lambda score, baseline: False if baseline is None or score is None \
+                else op(score, baseline)
+
         if metric_optimization == 'maximize':
-            self.best = float('-inf')
-            self.improved = lambda score: score > self.best
+            self.improved = _improved(lambda a, b: a > b)
         elif metric_optimization == 'minimize':
-            self.best = float('inf')
-            self.improved = lambda score: score < self.best
+            self.improved = _improved(lambda a, b: a < b)
         else:
             raise ConfigError('metric_optimization has to be one of {}'.format(['maximize', 'minimize']))
 
         self.validate_first = validate_first
+        self.validation_number = 0 if validate_first else 1
         self.validation_patience = validation_patience
         self.val_every_n_epochs = val_every_n_epochs
         self.val_every_n_batches = val_every_n_batches
         self.log_every_n_epochs = log_every_n_epochs
         self.log_every_n_batches = log_every_n_batches
         self.log_on_k_batches = log_on_k_batches if log_on_k_batches >= 0 else None
+        self.save_every_n_epochs = save_every_n_epochs
+        self.save_every_n_batches = save_every_n_batches
 
         self.max_epochs = epochs
         self.epoch = start_epoch_num
@@ -124,7 +146,7 @@ class NNTrainer(FitTrainer):
         self.patience = 0
         self.last_result = {}
         self.losses = []
-        self.start_time = None
+        self.start_time: Optional[float] = None
 
         if self.tensorboard_log_dir is not None:
             self.tb_train_writer = self._tf.summary.FileWriter(str(self.tensorboard_log_dir / 'train_log'))
@@ -135,7 +157,12 @@ class NNTrainer(FitTrainer):
             raise RuntimeError('Cannot save already finalized chainer')
 
         self._chainer.save()
-        self._saved = True
+
+    def _is_initial_validation(self):
+        return self.validation_number == 0
+
+    def _is_first_validation(self):
+        return self.validation_number == 1
 
     def _validate(self, iterator: DataLearningIterator,
                   tensorboard_tag: Optional[str] = None, tensorboard_index: Optional[int] = None) -> None:
@@ -159,15 +186,32 @@ class NNTrainer(FitTrainer):
             self.tb_valid_writer.flush()
 
         m_name, score = metrics[0]
-        if self.improved(score):
+
+        # Update the patience
+        if self.score_best is None:
             self.patience = 0
-            log.info('New best {} of {}'.format(m_name, score))
-            self.best = score
+        else:
+            if self.improved(score, self.score_best):
+                self.patience = 0
+            else:
+                self.patience += 1
+
+        # Run the validation model-saving logic
+        if self._is_initial_validation():
+            log.info('Initial best {} of {}'.format(m_name, score))
+            self.score_best = score
+        elif self._is_first_validation() and self.score_best is None:
+            log.info('First best {} of {}'.format(m_name, score))
+            self.score_best = score
+            log.info('Saving model')
+            self.save()
+        elif self.improved(score, self.score_best):
+            log.info('Improved best {} of {}'.format(m_name, score))
+            self.score_best = score
             log.info('Saving model')
             self.save()
         else:
-            self.patience += 1
-            log.info('Did not improve on the {} of {}'.format(m_name, self.best))
+            log.info('Did not improve on the {} of {}'.format(m_name, self.score_best))
 
         report['impatience'] = self.patience
         if self.validation_patience > 0:
@@ -176,6 +220,7 @@ class NNTrainer(FitTrainer):
         self._send_event(event_name='after_validation', data=report)
         report = {'valid': report}
         print(json.dumps(report, ensure_ascii=False))
+        self.validation_number += 1
 
     def _log(self, iterator: DataLearningIterator,
              tensorboard_tag: Optional[str] = None, tensorboard_index: Optional[int] = None) -> None:
@@ -199,7 +244,7 @@ class NNTrainer(FitTrainer):
 
         report.update(self.last_result)
         if self.losses:
-            report['loss'] = sum(self.losses)/len(self.losses)
+            report['loss'] = sum(self.losses) / len(self.losses)
             self.losses.clear()
             metrics.append(('loss', report['loss']))
 
@@ -254,6 +299,8 @@ class NNTrainer(FitTrainer):
                 if self.val_every_n_batches > 0 and self.train_batches_seen % self.val_every_n_batches == 0:
                     self._validate(iterator,
                                    tensorboard_tag='every_n_batches', tensorboard_index=self.train_batches_seen)
+                elif self.save_every_n_batches > 0 and self.train_batches_seen % self.save_every_n_batches == 0:
+                    self.save()
 
                 self._send_event(event_name='after_batch')
 
@@ -276,7 +323,8 @@ class NNTrainer(FitTrainer):
 
             if self.val_every_n_epochs > 0 and self.epoch % self.val_every_n_epochs == 0:
                 self._validate(iterator, tensorboard_tag='every_n_epochs', tensorboard_index=self.epoch)
-
+            elif self.save_every_n_epochs > 0 and self.epoch % self.save_every_n_epochs == 0:
+                self.save()
             self._send_event(event_name='after_epoch')
 
             if 0 < self.max_epochs <= self.epoch:
@@ -295,7 +343,9 @@ class NNTrainer(FitTrainer):
             except KeyboardInterrupt:
                 log.info('Stopped training')
         else:
-            log.warn(f'Using {self.__class__.__name__} for a pipeline without batched training')
+            log.warning(f'Using {self.__class__.__name__} for a pipeline without batched training')
 
-        if not self._saved:
+        # Run the at-train-exit model-saving logic
+        if self.validation_number < 1:
+            log.info('Save model to capture early training results')
             self.save()

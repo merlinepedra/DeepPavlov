@@ -9,7 +9,14 @@
       ],
       "propagate": true
     },
-    "uvicorn": {
+    "uvicorn.access": {
+      "level": "INFO",
+      "handlers": [
+        "uvicorn_handler"
+      ],
+      "propagate": true
+    },
+    "uvicorn.error": {
       "level": "INFO",
       "handlers": [
         "uvicorn_handler"
@@ -23,7 +30,7 @@
       "datefmt": "%Y-%m-%d %H:%M:%S"
     },
     "uvicorn_fmt": {
-      "format":"%(asctime)s %(message)s",
+      "format": "%(asctime)s %(message)s",
       "datefmt": "%Y-%m-%d %H:%M:%S"
     }
   },
@@ -50,7 +57,13 @@
       "class": "logging.StreamHandler",
       "level": "INFO",
       "formatter": "uvicorn_fmt",
-      "stream": "ext://sys.stdout"
+      "stream": "ext://sys.stdout",
+      "filters": ["probeFilter"]
+    }
+  },
+  "filters": {
+    "probeFilter": {
+      "()": "deeppavlov.core.common.log.ProbeFilter"
     }
   }
 }

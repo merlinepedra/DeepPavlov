@@ -26,15 +26,18 @@ HEAD_COLUMN, DEP_COLUMN = 6, 7
 
 log = getLogger(__name__)
 
+
 def get_language(filepath: str) -> str:
     """Extracts language from typical UD filename
     """
     return filepath.split("-")[0]
 
-def read_infile(infile: Union[Path, str], from_words=False,
+
+def read_infile(infile: Union[Path, str], *, from_words=False,
                 word_column: int = WORD_COLUMN, pos_column: int = POS_COLUMN,
                 tag_column: int = TAG_COLUMN, head_column: int = HEAD_COLUMN,
                 dep_column: int = DEP_COLUMN, max_sents: int = -1,
+                max_sent_length: int = sys.maxsize,
                 read_only_words: bool = False, read_syntax: bool = False) -> List[Tuple[List, Union[List, None]]]:
     """Reads input file in CONLL-U format
 
@@ -45,15 +48,20 @@ def read_infile(infile: Union[Path, str], from_words=False,
         tag_column: column containing fine-grained tags (default=5)
         head_column: column containing syntactic head position (default=6)
         dep_column: column containing syntactic dependency label (default=7)
-        max_sents: maximal number of sents to read
+        max_sents: maximal number of sentences to read
         read_only_words: whether to read only words
+        read_syntax: whether to return ``heads`` and ``deps`` alongside ``tags``. Ignored if read_only_words is ``True``
 
     Returns:
-        a list of sentences. Each item contains a word sequence and a tag sequence, which is ``None``
-        in case ``read_only_words = True``
+        a list of sentences. Each item contains a word sequence and an output sequence.
+        The output sentence is ``None``, if ``read_only_words`` is ``True``,
+        a single list of word tags if ``read_syntax`` is False,
+        and a list of the form [``tags``, ``heads``, ``deps``] in case ``read_syntax`` is ``True``.
+
     """
     answer, curr_word_sent, curr_tag_sent = [], [], []
     curr_head_sent, curr_dep_sent = [], []
+    # read_syntax = read_syntax and read_only_words
     if from_words:
         word_column, read_only_words = 0, True
     if infile is not sys.stdin:
@@ -62,16 +70,15 @@ def read_infile(infile: Union[Path, str], from_words=False,
         fin = sys.stdin
     for line in fin:
         line = line.strip()
-        if line.startswith("#"):
+        if line.startswith("#") and not read_only_words:
             continue
         if line == "":
-            if len(curr_word_sent) > 0:
+            if len(curr_word_sent) > 0 and len(curr_word_sent) < max_sent_length:
                 if read_only_words:
                     curr_tag_sent = None
-                curr_answer = (curr_word_sent, curr_tag_sent)
-                if not read_only_words and read_syntax:
-                    curr_answer += (curr_head_sent, curr_dep_sent)
-                answer.append(curr_answer)
+                elif read_syntax:
+                    curr_tag_sent = [curr_tag_sent, curr_head_sent, curr_dep_sent]
+                answer.append((curr_word_sent, curr_tag_sent))
             curr_tag_sent, curr_word_sent = [], []
             curr_head_sent, curr_dep_sent = [], []
             if len(answer) == max_sents:
@@ -89,13 +96,12 @@ def read_infile(infile: Union[Path, str], from_words=False,
             if read_syntax:
                 curr_head_sent.append(int(splitted[head_column]))
                 curr_dep_sent.append(splitted[dep_column])
-    if len(curr_word_sent) > 0:
+    if len(curr_word_sent) > 0 and len(curr_word_sent) < max_sent_length:
         if read_only_words:
             curr_tag_sent = None
-        curr_answer = (curr_word_sent, curr_tag_sent)
-        if not read_only_words and read_syntax:
-            curr_answer += (curr_head_sent, curr_dep_sent)
-        answer.append(curr_answer)
+        elif read_syntax:
+            curr_tag_sent = [curr_tag_sent, curr_head_sent, curr_dep_sent]
+        answer.append((curr_word_sent, curr_tag_sent))
     if infile is not sys.stdin:
         fin.close()
     if len(answer) > 0 and len(answer[0]) > 2:
@@ -110,7 +116,7 @@ class MorphotaggerDatasetReader(DatasetReader):
     URL = 'http://files.deeppavlov.ai/datasets/UD2.0_source/'
 
     def read(self, data_path: Union[List, str],
-             language: Optional[None] = None,
+             language: Optional[str] = None,
              data_types: Optional[List[str]] = None,
              **kwargs) -> Dict[str, List]:
         """Reads UD dataset from data_path.
@@ -175,11 +181,11 @@ class MorphotaggerDatasetReader(DatasetReader):
             dir_path.mkdir(exist_ok=True, parents=True)
             download_decompress(url, dir_path)
             mark_done(dir_path)
-        data = {}
+        data = {"train": [], "valid": [], "test": []}
         for mode, filepath in zip(data_types, data_path):
             if mode == "dev":
                 mode = "valid"
 #             if mode == "test":
 #                 kwargs["read_only_words"] = True
-            data[mode] = read_infile(filepath, **kwargs)
+            data[mode] += read_infile(filepath, **kwargs)
         return data

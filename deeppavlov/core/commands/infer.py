@@ -22,6 +22,7 @@ from typing import Optional, Union
 from deeppavlov.core.commands.utils import import_packages, parse_config
 from deeppavlov.core.common.chainer import Chainer
 from deeppavlov.core.common.params import from_params
+from deeppavlov.core.data.utils import jsonify_data
 from deeppavlov.download import deep_download
 
 log = getLogger(__name__)
@@ -92,8 +93,12 @@ def interact_model(config: Union[str, Path, dict]) -> None:
         print('>>', *pred)
 
 
-def predict_on_stream(config: Union[str, Path, dict], batch_size: int = 1, file_path: Optional[str] = None) -> None:
+def predict_on_stream(config: Union[str, Path, dict],
+                      batch_size: Optional[int] = None,
+                      file_path: Optional[str] = None) -> None:
     """Make a prediction with the component described in corresponding configuration file."""
+
+    batch_size = batch_size or 1
     if file_path is None or file_path == '-':
         if sys.stdin.isatty():
             raise RuntimeError('To process data from terminal please use interact mode')
@@ -118,7 +123,7 @@ def predict_on_stream(config: Union[str, Path, dict], batch_size: int = 1, file_
         if len(model.out_params) == 1:
             res = [res]
         for res in zip(*res):
-            res = json.dumps(res, ensure_ascii=False)
+            res = json.dumps(jsonify_data(res), ensure_ascii=False)
             print(res, flush=True)
 
     if f is not sys.stdin:
