@@ -123,7 +123,7 @@ class UDPunctuationDatasetReader(DatasetReader):
                 min_length = kwargs.pop("min_length", 0)
             else:
                 min_length = kwargs.pop("min_length", 5)
-            print(data_type, min_length)
+            # print(data_type, min_length)
             if data_format == "ud":
                 answer[data_type] += read_ud_punctuation_file(infile, min_length=min_length, **kwargs)
             elif data_format == "tokenized":

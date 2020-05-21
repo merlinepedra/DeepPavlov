@@ -33,7 +33,7 @@ from deeppavlov.core.models.tf_backend import TfModelMeta
 from deeppavlov.models.bidirectional_lms.elmo.utils import load_model, load_options_latest_checkpoint
 from deeppavlov.models.bidirectional_lms.elmo.data import InferBatcher
 
-logger = getLogger(__name__)
+log = getLogger(__name__)
 
 @register('elmo_bilm')
 class ELMoEmbedder(Component, metaclass=TfModelMeta):

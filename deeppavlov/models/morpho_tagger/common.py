@@ -114,7 +114,7 @@ class TagOutputPrettifier(Component):
             self.format_string = "{}\t{}\t_\t{}\t_\t{}\t_\t_\t_\t_"
         else:
             raise ValueError("Wrong mode for TagOutputPrettifier: {}, "
-                             "it must be 'basic', 'conllu' or 'ud'.".format(self.mode))
+                             "it must be 'basic', 'conllu' or 'ud'.".format(self.format_mode))
 
     def __call__(self, X: List[List[str]], Y: List[List[str]]) -> List[Union[List[str], str]]:
         """Calls the :meth:`~prettify` function for each input sentence.
