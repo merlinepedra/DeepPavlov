@@ -366,7 +366,7 @@ class BertSequenceNetwork(LRScheduledTFModel):
         with tf.variable_scope('ner/additional_inputs'):
             for i, mode in enumerate(self.additional_inputs_mode):
                 if mode == "concat":
-                    units = tf.concat([units] + additional_embeddings[i], -1)
+                    units = tf.concat([units] + [additional_embeddings[i]], -1)
         return units
 
     def _get_tag_mask(self) -> tf.Tensor:
@@ -587,6 +587,8 @@ class BertSequenceTagger(BertSequenceNetwork):
                  use_crf=False,
                  encoder_layer_ids: List[int] = (-1,),
                  encoder_dropout: float = 0.0,
+                 pre_output_units: Optional[List[int]] = None,
+                 pre_output_activations: Optional[List[str]] = None,
                  additional_inputs_dim: Optional[List[int]] = None,
                  additional_inputs_mode: Optional[List[str]] = 'add',
                  are_additional_inputs_indexes: Optional[List[bool]] = False,
@@ -618,6 +620,7 @@ class BertSequenceTagger(BertSequenceNetwork):
         self.birnn_hidden_size = birnn_hidden_size
         self.return_probas = return_probas
         self.idle_tags_number = idle_tags_number
+        self._initialize_pre_output_layer(pre_output_units, pre_output_activations)
         super().__init__(keep_prob=keep_prob,
                          bert_config_file=bert_config_file,
                          pretrained_bert=pretrained_bert,
@@ -645,6 +648,17 @@ class BertSequenceTagger(BertSequenceNetwork):
                          clip_norm=clip_norm,
                          **kwargs)
 
+    def _initialize_pre_output_layer(self, pre_output_units, pre_output_activations):
+        if pre_output_units is None:
+            self.pre_output_units, self.pre_output_activations = None, None
+            return
+        if isinstance(pre_output_units, int):
+            pre_output_units = [pre_output_units]
+        if not isinstance(pre_output_activations, (list, tuple)):
+            pre_output_activations = [pre_output_activations] * len(pre_output_units)
+        self.pre_output_units = pre_output_units
+        self.pre_output_activations = pre_output_activations
+
     def _init_graph(self) -> None:
         self._init_placeholders()
 
@@ -659,6 +673,9 @@ class BertSequenceTagger(BertSequenceNetwork):
                                   name='birnn')
                 units = tf.concat(units, -1)
             # TODO: maybe add one more layer?
+            if self.pre_output_units is not None:
+                for n_units, activation in zip(self.pre_output_units, self.pre_output_activations):
+                    units = tf.keras.layers.Dense(units=n_units, activation=activation)(units)
             logits = tf.layers.dense(units, units=self.n_tags, name="output_dense")
 
             self.logits = token_from_subtoken(logits, self.y_masks_ph)
