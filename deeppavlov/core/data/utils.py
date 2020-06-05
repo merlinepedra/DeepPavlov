@@ -30,6 +30,9 @@ import numpy as np
 import requests
 from tqdm import tqdm
 
+from deeppavlov.core.common.registry import register
+from deeppavlov.core.models.component import Component
+
 log = getLogger(__name__)
 
 _MARK_DONE = '.done'
@@ -397,6 +400,17 @@ def zero_pad(batch: Sequence,
         for b, zp in zip(batch, zp_batch):
             zero_pad(b, zp)
     return zp_batch
+
+
+@register("zero_padder")
+class ZeroPadder(Component):
+
+    def __init__(self, pad_value=0, dtype=np.float32, *args, **kwargs):
+        self.pad_value = pad_value
+        self.dtype = dtype
+
+    def __call__(self, batch):
+        return zero_pad(batch, dtype=self.dtype, padding=self.pad_value)
 
 
 def is_str_batch(batch: Iterable) -> bool:

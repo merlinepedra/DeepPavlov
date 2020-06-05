@@ -290,6 +290,7 @@ class BertNerWordSubwordMapper(Component):
                 if token[:2] != "##":
                     word_count += 1
                 answer[i, j] = word_data[i][word_count]
+            # может быть неверно при наличии паддинга
             assert word_count == len(word_data[i]) - 1
         return answer
         

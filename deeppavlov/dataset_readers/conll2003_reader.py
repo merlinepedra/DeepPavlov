@@ -30,9 +30,10 @@ class BasicNerReader(DatasetReader):
     def read(self, data_path: List[Union[str, Path]],
              data_types: List[str], sep: str = None, 
              max_length=None, 
-             provide_pos=False,
+             provide_pos=False, pos_is_vector=False,
              **kwargs):
         self.provide_pos = self.x_is_tuple = provide_pos
+        self.pos_is_vector = pos_is_vector
         if len(data_path) != len(data_types):
             raise ValueError("There must be equal number of data types and input files")
         answer = {"train": [], "valid": [], "test": []}    
@@ -87,6 +88,8 @@ class BasicNerReader(DatasetReader):
                     if self.provide_pos:
                         try:
                             token, pos, *_, tag = line.split(sep)
+                            if self.pos_is_vector:
+                                pos = [float(x) for x in pos.split(",")]
                             pos_tags.append(pos)
                         except:
                             log.warning('Skip {}, splitted as {}'.format(repr(line), repr(line.split(sep))))
