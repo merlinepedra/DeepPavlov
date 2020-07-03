@@ -91,7 +91,7 @@
         "save_path": "{MODEL_PATH}/model.pkl",
         "load_path": "{MODEL_PATH}/model.pkl",
         "model_class": "sklearn.linear_model:LogisticRegression",
-        "infer_method": "predict",
+        "infer_method": "predict_proba",
         "ensure_list_output": true
       },
       {
