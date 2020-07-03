@@ -75,7 +75,7 @@
         ],
         "fit_on": [
           "x_vec",
-          "y_onehot"
+          "y_ids"
         ],
         "class_name": "sklearn_component",
         "main": true,
