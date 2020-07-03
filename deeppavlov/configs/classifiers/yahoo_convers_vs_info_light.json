@@ -83,7 +83,8 @@
         "load_path": "{MODEL_PATH}/model.pkl",
         "model_class": "sklearn.svm:SVC",
         "infer_method": "predict",
-        "ensure_list_output": true
+        "ensure_list_output": true,
+        "probability": true
       },
       {
         "class_name": "proba2labels",
