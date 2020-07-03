@@ -93,7 +93,8 @@
         "load_path": "{MODEL_PATH}/model.pkl",
         "model_class": "sklearn.ensemble:RandomForestClassifier",
         "infer_method": "predict_proba",
-        "ensure_list_output": true
+        "ensure_list_output": true,
+        "n_estimators": 1000
       },
       {
         "class_name": "proba2labels",
