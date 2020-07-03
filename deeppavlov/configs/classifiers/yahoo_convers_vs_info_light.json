@@ -45,6 +45,15 @@
           "x"
         ],
         "out": [
+          "x_prep"
+        ],
+        "class_name": "dirty_comments_preprocessor"
+      },
+      {
+        "in": [
+          "x_prep"
+        ],
+        "out": [
           "x_vec"
         ],
         "fit_on": [
