@@ -58,13 +58,13 @@
       },
       {
         "in": [
-          "x_pca"
+          "x_vec"
         ],
         "out": [
-          "y_pred_onehot"
+          "y_pred_probas"
         ],
         "fit_on": [
-          "x_pca",
+          "x_vec",
           "y_onehot"
         ],
         "class_name": "sklearn_component",
@@ -76,32 +76,15 @@
         "ensure_list_output": true
       },
       {
-        "in": [
-          "y_pred_probas"
-        ],
-        "out": [
-          "y_pred_ids"
-        ],
         "class_name": "proba2labels",
+        "in": "y_pred_probas",
+        "out": "y_pred_ids",
         "max_proba": true
       },
       {
-        "in": [
-          "y_pred_ids"
-        ],
-        "out": [
-          "y_pred_labels"
-        ],
-        "ref": "classes_vocab"
-      },
-      {
-        "ref": "my_one_hotter",
-        "in": [
-          "y_pred_ids"
-        ],
-        "out": [
-          "y_pred_onehot"
-        ]
+        "ref": "classes_vocab",
+        "in": "y_pred_ids",
+        "out": "y_pred_labels"
       }
     ],
     "out": [
