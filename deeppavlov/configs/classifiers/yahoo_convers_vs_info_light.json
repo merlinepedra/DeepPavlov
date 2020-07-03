@@ -47,7 +47,8 @@
         "out": [
           "x_prep"
         ],
-        "class_name": "dirty_comments_preprocessor"
+        "class_name": "dirty_comments_preprocessor",
+        "remove_punctuation": false
       },
       {
         "in": [
@@ -73,7 +74,7 @@
           5
         ],
         "max_features": 10000,
-        "norm": null
+        "norm": "l2"
       },
       {
         "in": [
