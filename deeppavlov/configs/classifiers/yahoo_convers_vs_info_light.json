@@ -90,10 +90,9 @@
         "main": true,
         "save_path": "{MODEL_PATH}/model.pkl",
         "load_path": "{MODEL_PATH}/model.pkl",
-        "model_class": "sklearn.svm:SVC",
+        "model_class": "sklearn.linear_model:LogisticRegression",
         "infer_method": "predict",
-        "ensure_list_output": true,
-        "probability": true
+        "ensure_list_output": true
       },
       {
         "class_name": "proba2labels",
