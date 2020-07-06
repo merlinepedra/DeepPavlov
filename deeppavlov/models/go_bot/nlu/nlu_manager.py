@@ -132,7 +132,9 @@ class MockNLUManager(NLUManager):
         return self.textsids2nlu[text_ix]
 
     def nlu(self, text: str) -> NLUResponse:
-        nlu = self.textsids2nlu[self.texts2textsids[text]]
+        nlu = self.textsids2nlu.get(self.texts2textsids.get(text, -1), NLUResponse(dict,
+                                                                                   [0.] * len(self.known_intents),
+                                                                                   self._tokenize_single_text_entry(text)))
         return nlu
 
     def num_of_known_intents(self) -> int:
