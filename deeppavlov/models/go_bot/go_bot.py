@@ -27,7 +27,7 @@ from deeppavlov.models.go_bot.dto.dataset_features import UtteranceDataEntry, Di
     BatchDialoguesDataset, UtteranceFeatures, UtteranceTarget, BatchDialoguesFeatures
 from deeppavlov.models.go_bot.dto.shared_gobot_params import SharedGoBotParams
 from deeppavlov.models.go_bot.nlg.nlg_manager import NLGManagerInterface
-from deeppavlov.models.go_bot.nlu.nlu_manager import NLUManager
+from deeppavlov.models.go_bot.nlu.nlu_manager import NLUManager, MockNLUManager
 from deeppavlov.models.go_bot.policy.policy_network import PolicyNetwork, PolicyNetworkParams
 from deeppavlov.models.go_bot.policy.dto.policy_prediction import PolicyPrediction
 from deeppavlov.models.go_bot.tracker.featurized_tracker import FeaturizedTracker
@@ -133,7 +133,7 @@ class GoalOrientedBot(NNModel):
         policy_network_params = PolicyNetworkParams(hidden_size, dropout_rate, l2_reg_coef,
                                                     dense_size, attention_mechanism, network_parameters)
 
-        self.nlu_manager = NLUManager(tokenizer, slot_filler, intent_classifier)  # todo move to separate pipeline unit
+        self.nlu_manager = MockNLUManager(tokenizer, slot_filler, intent_classifier, dataset_folder=kwargs["dataset_folder"])  # todo move to separate pipeline unit
         self.nlg_manager = nlg_manager
         self.data_handler = TokensVectorizer(debug, word_vocab, bow_embedder, embedder)
 

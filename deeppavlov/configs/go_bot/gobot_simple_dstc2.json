@@ -78,7 +78,8 @@
         "tracker": {
           "class_name": "featurized_tracker",
           "slot_names": ["pricerange", "this", "area", "food", "name"]
-        }
+        },
+        "dataset_folder": "{DSTC2_DATA_PATH}"
       }
     ]
   },

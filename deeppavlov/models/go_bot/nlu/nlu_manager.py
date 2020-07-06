@@ -1,5 +1,7 @@
+import json
 from logging import getLogger
-from typing import List
+from pathlib import Path
+from typing import List, Union
 
 from deeppavlov import Chainer
 from deeppavlov.models.go_bot.nlu.dto.nlu_response import NLUResponse
@@ -19,7 +21,7 @@ class NLUManager(NLUManagerInterface):
     (the whole go-bot pipeline is as follows: NLU, dialogue-state-tracking&policy-NN, NLG)
     """
 
-    def __init__(self, tokenizer, slot_filler, intent_classifier, debug=False):
+    def __init__(self, tokenizer, slot_filler, intent_classifier, debug=False, **kwargs):
         self.debug = debug
         if self.debug:
             log.debug(f"BEFORE {self.__class__.__name__} init(): "
@@ -80,3 +82,58 @@ class NLUManager(NLUManagerInterface):
             the number of intents known to the NLU module
         """
         return len(self.intents)
+
+
+class MockNLUManager(NLUManager):
+
+    def __init__(self, tokenizer, slot_filler, intent_classifier, dataset_folder, **kwargs):
+        super().__init__(tokenizer, slot_filler, intent_classifier)
+
+        dataset = json.load(open(f"{dataset_folder}/simple-dstc2-trn.json")) + \
+                  json.load(open(f"{dataset_folder}/simple-dstc2-tst.json")) + \
+                  json.load(open(f"{dataset_folder}/simple-dstc2-val.json"))
+        user_turns = [turn
+                      for dialogue in dataset
+                      for turn in dialogue
+                      if turn.get("speaker", '') == 1]
+
+        self.texts2textsids = {}
+        # known_intents = set()
+        from collections import defaultdict
+        self.textsids2intents = defaultdict(list)
+        self.textsids2slots = {}
+        for turn_ix, turn in enumerate(user_turns):
+            self.texts2textsids[turn["text"]] = turn_ix
+            self.textsids2slots[turn_ix] = turn.get("slots", [])
+            self.textsids2intents[turn_ix] = [act
+                                              for act in turn.get("act", '').split('+')
+                                              if act != '']
+
+        self.known_intents = sorted(set(intent
+            for intents_group in self.textsids2intents.values()
+            for intent in intents_group
+        ))
+
+
+        self.textsids2nlu = {}
+        for turn in user_turns:
+            text_ix = self.texts2textsids[turn["text"]]
+            tokens = self._tokenize_single_text_entry(turn["text"])
+            slots = dict(self.textsids2slots.get(text_ix, []))
+
+            intents_mhe = [0.] * len(self.known_intents)
+            for action in self.textsids2intents[turn_ix]:
+                intents_mhe[self.known_intents.index(action)] = 1.
+
+            self.textsids2nlu[text_ix] = NLUResponse(slots, intents_mhe, tokens)
+
+    def extract_nlu(self, turn) -> NLUResponse:
+        text_ix = self.texts2textsids[turn["text"]]
+        return self.textsids2nlu[text_ix]
+
+    def nlu(self, text: str) -> NLUResponse:
+        nlu = self.textsids2nlu[self.texts2textsids[text]]
+        return nlu
+
+    def num_of_known_intents(self) -> int:
+        return len(self.known_intents)
