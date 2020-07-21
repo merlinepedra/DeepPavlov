@@ -33,7 +33,7 @@ class Highway(Layer):
 
     def build(self, input_shape):
         assert len(input_shape) >= 2
-        input_dim = input_shape[-1]
+        input_dim = int(input_shape[-1])
 
         self.gate_kernel = self.add_weight(
             shape=(input_dim, input_dim), initializer='uniform', name='gate_kernel')

@@ -104,7 +104,7 @@ IDLE_FEATURES = {"Voice", "Animacy", "Degree", "Mood", "VerbForm", "PronType", "
 
 
 def get_tag_distance(first, second, first_sep=",", second_sep=" ",
-                     idle_features=None, pos_diff_weight=2):
+                     match_similar_pos=True, idle_features=None, pos_diff_weight=2):
     """
     Measures the distance between two (Russian) morphological tags in UD Format.
     The first tag is usually the one predicted by our model (therefore it uses comma
@@ -124,7 +124,11 @@ def get_tag_distance(first, second, first_sep=",", second_sep=" ",
         idle_features = IDLE_FEATURES
     first_pos, first_feats = make_pos_and_tag(first, sep=first_sep, return_mode="dict")
     second_pos, second_feats = make_pos_and_tag(second, sep=second_sep, return_mode="dict")
-    dist = int(not _are_equal_pos(first_pos, second_pos)) * pos_diff_weight
+    if match_similar_pos:
+        are_pos_equal = _are_equal_pos(first_pos, second_pos)
+    else:
+        are_pos_equal = (first_pos == second_pos)
+    dist = int(not are_pos_equal) * pos_diff_weight
     for key, value in first_feats.items():
         other = second_feats.get(key)
         if other is None:
@@ -141,12 +145,14 @@ class TagNormalizer(Estimator):
 
     def __init__(self, basic_language: Union[int, str] = 0,
                  pos_diff_weight: int = 2, 
+                 match_similar_pos: bool = True,
                  idle_features: Optional[List[str]] = None, 
                  save_path: Optional[str] = None, 
                  load_path: Optional[str] = None, 
                  *args, **kwargs):
         self.basic_language = basic_language
         self.pos_diff_weight = pos_diff_weight
+        self.match_similar_pos = match_similar_pos
         self.basic_tags = set()
         self.basic_pos = set()
         self.tag_mapping = dict()
@@ -177,6 +183,7 @@ class TagNormalizer(Estimator):
                     self.basic_tags.add(tag)
                     pos = tag.split(",")[0]
                     self.basic_pos.add(pos)
+                    self.tag_mapping[tag] = tag
         for tag_sent, language_index in zip(tag_sents, languages):
             if language_index != self.basic_language:
                 for tag in tag_sent:
@@ -195,6 +202,7 @@ class TagNormalizer(Estimator):
         for basic_tag in self.basic_tags:
             dist = get_tag_distance(basic_tag, tag, first_sep=",", second_sep=",", 
                                     idle_features=self.idle_features,
+                                    match_similar_pos=self.match_similar_pos,
                                     pos_diff_weight=self.pos_diff_weight)
             if dist < best_dist:
                 best_dist, best_tag = dist, basic_tag
