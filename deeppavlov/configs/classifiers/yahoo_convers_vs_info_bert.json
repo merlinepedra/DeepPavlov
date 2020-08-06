@@ -144,7 +144,7 @@
       "ROOT_PATH": "~/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
-      "MODEL_PATH": "{MODELS_PATH}/classifiers/yahoo_convers_vs_info_v3"
+      "MODEL_PATH": "{MODELS_PATH}/classifiers/yahoo_convers_vs_info_v4"
     },
     "requirements": [
       "{DEEPPAVLOV_PATH}/requirements/tf.txt",
@@ -156,7 +156,7 @@
         "subdir": "{DOWNLOADS_PATH}/bert_models"
       },
       {
-        "url": "http://files.deeppavlov.ai/deeppavlov_data/classifiers/yahoo_convers_vs_info_v3.tar.gz",
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/classifiers/yahoo_convers_vs_info_v4.tar.gz",
         "subdir": "{MODELS_PATH}/classifiers/"
       }
     ]
