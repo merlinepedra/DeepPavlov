@@ -84,12 +84,11 @@ def read_punctuation_file(infile, to_tokenize=False, max_sents=-1,
         sents = [sent.split() for sent in lines]
     answer = []
     for sent in sents:
-        if len(sent) < min_length:
-            continue
-        if max_length is not None and len(sent) > max_length:
-            continue
-
         word_sent, punct_sent, word_indexes = make_word_punct_sents(sent)
+        if len(word_sent) < min_length:
+            continue
+        if max_length is not None and len(word_sent) > max_length:
+            continue
         answer.append((word_sent, punct_sent))
     return answer
 
@@ -97,7 +96,7 @@ def read_punctuation_file(infile, to_tokenize=False, max_sents=-1,
 class UDPunctuationDatasetReader(DatasetReader):
 
     def read(self, data_path: Dict, data_types: Optional[List[str]] = None,
-             data_formats=None, **kwargs) -> Dict[str, List]:
+             data_formats=None, skip_short_test_sentences=True, **kwargs) -> Dict[str, List]:
         """Reads UD dataset from data_path.
 
         Args:
@@ -116,16 +115,17 @@ class UDPunctuationDatasetReader(DatasetReader):
         if data_formats is None:
             data_formats = ["ud"] * len(data_path)
         answer = {"train": [], "valid": [], "test": []}
+        min_length = kwargs.pop("min_length", 5)
         for data_type, infile, data_format in zip(data_types, data_path, data_formats):
             if data_type not in data_types:
                 continue
-            if data_type != "train":
-                min_length = kwargs.pop("min_length", 0)
+            if data_type != "train" and not skip_short_test_sentences:
+                curr_min_length = 1
             else:
-                min_length = kwargs.pop("min_length", 5)
-            # print(data_type, min_length)
+                curr_min_length = min_length
+            print(data_type, min_length)
             if data_format == "ud":
-                answer[data_type] += read_ud_punctuation_file(infile, min_length=min_length, **kwargs)
+                answer[data_type] += read_ud_punctuation_file(infile, min_length=curr_min_length, **kwargs)
             elif data_format == "tokenized":
                 answer[data_type] += read_punctuation_file(infile, min_length=min_length, to_tokenize=False, **kwargs)
             elif data_format == "text":

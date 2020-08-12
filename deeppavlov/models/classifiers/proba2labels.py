@@ -14,12 +14,14 @@
 
 from logging import getLogger
 from typing import List, Union
+from collections.abc import Iterable
 
 import numpy as np
 
 from deeppavlov.core.common.errors import ConfigError
 from deeppavlov.core.common.registry import register
 from deeppavlov.core.models.component import Component
+from deeppavlov.core.data.simple_vocab import SimpleVocabulary
 
 log = getLogger(__name__)
 
@@ -68,10 +70,57 @@ class Proba2Labels(Component):
             return [list(np.where(np.array(d) > self.confident_threshold)[0])
                     for d in data]
         elif self.max_proba:
-            return [np.argmax(d) for d in data]
+            return [np.argmax(d, axis=-1) for d in data]
         elif self.top_n:
-            return [np.argsort(d)[::-1][:self.top_n] for d in data]
+            return [np.argsort(d, axis=-1)[::-1][...,:self.top_n] for d in data]
         else:
             raise ConfigError("Proba2Labels requires one of three arguments: bool `max_proba` or "
                               "float `confident_threshold` for multi-label classification or"
                               "integer `top_n` for choosing several labels with the highest probabilities")
+
+
+@register('proba2labelsdict')
+class Proba2LabelsDict(Component):
+
+    """
+    Transforms the lists (arrays) of probabilities to dictionaries of the form 'label': 'prob'
+    """
+
+    def __init__(self,
+                 vocab: SimpleVocabulary,
+                 confidence_threshold: float = 0.0,
+                 top_n: int = None,
+                 return_mode = "dict",
+                 **kwargs) -> None:
+        self.vocab = vocab
+        self.confidence_threshold = confidence_threshold
+        self.top_n = top_n
+        if return_mode in ["dict", "items"]:
+            self.return_mode = return_mode
+        else:
+            raise ValueError("'return_mode' must be in list ['dict', 'items'].")
+
+    def _process(self, data):
+        if isinstance(data[0], (float, np.int_, np.float32)):
+            labels = self.vocab._i2t
+            if self.confidence_threshold > 0.0:
+                indexes = np.where(data >= self.confidence_threshold)[0]
+                labels = np.take(labels, indexes)
+                data = np.take(data, indexes)
+            else:
+                indexes = np.arange(len(data))
+            if self.top_n is not None:
+                indexes = np.argsort(data)[::-1][:self.top_n]
+                labels = np.take(labels, indexes)
+                data = np.take(data, indexes)
+            if self.return_mode == "dict":
+                return dict(zip(labels, data))
+            else:
+                return list(zip(labels, data))
+        elif isinstance(data, Iterable):
+            return [self._process(elem) for elem in data]
+        else:
+            raise TypeError(f"Incorrect argument {data}")
+
+    def __call__(self, data):
+        return self._process(data)
