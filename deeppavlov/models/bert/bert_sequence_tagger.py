@@ -251,7 +251,7 @@ class BertSequenceNetwork(LRScheduledTFModel):
                 log.info('[initializing model with Bert from {}]'.format(pretrained_bert))
                 # Exclude optimizer and classification variables from saved variables
                 var_list = self._get_saveable_variables(
-                    exclude_scopes=('Optimizer', 'learning_rate', 'momentum', 'ner', 'EMA'))
+                    exclude_scopes=('Optimizer', 'learning_rate', 'momentum', 'ner', 'birnn', 'EMA'))
                 saver = tf.train.Saver(var_list)
                 saver.restore(self.sess, pretrained_bert)
 
@@ -489,6 +489,7 @@ class BertSequenceTagger(BertSequenceNetwork):
                  use_birnn: bool = False,
                  birnn_cell_type: str = 'lstm',
                  birnn_hidden_size: int = 128,
+                 exclude_birnn_scope = False,
                  ema_decay: float = None,
                  ema_variables_on_cpu: bool = True,
                  return_probas: bool = False,
@@ -507,6 +508,7 @@ class BertSequenceTagger(BertSequenceNetwork):
         self.use_birnn = use_birnn
         self.birnn_cell_type = birnn_cell_type
         self.birnn_hidden_size = birnn_hidden_size
+        self.exclude_birnn_scope = exclude_birnn_scope
         self.return_probas = return_probas
         self.idle_tags_number = idle_tags_number
         super().__init__(keep_prob=keep_prob,
@@ -535,14 +537,18 @@ class BertSequenceTagger(BertSequenceNetwork):
 
         units = super()._init_graph()
 
-        with tf.variable_scope('ner'):
-            if self.use_birnn:
+        birnn_scope = 'birnn' if self.exclude_birnn_scope else 'ner/birnn'
+        if self.use_birnn:
+            with tf.variable_scope(birnn_scope):
                 units, _ = bi_rnn(units,
-                                  self.birnn_hidden_size,
-                                  cell_type=self.birnn_cell_type,
-                                  seq_lengths=self.seq_lengths,
-                                  name='birnn')
+                                self.birnn_hidden_size,
+                                cell_type=self.birnn_cell_type,
+                                seq_lengths=self.seq_lengths,
+                                name='birnn')
                 units = tf.concat(units, -1)
+
+        with tf.variable_scope('ner'):
+            
             # TODO: maybe add one more layer?
             logits = tf.layers.dense(units, units=self.n_tags, name="output_dense")
 
@@ -620,17 +626,42 @@ class BertSequenceTagger(BertSequenceNetwork):
         feed_dict = self._build_feed_dict(input_ids, input_masks, y_masks)
         if self.ema:
             self.sess.run(self.ema.switch_to_test_op)
-        if not self.return_probas:
-            if self.use_crf:
-                pred = self._decode_crf(feed_dict)
-            else:
-                pred, seq_lengths = self.sess.run([self.y_probas, self.seq_lengths], feed_dict=feed_dict)
-                pred[:,:,:self.idle_tags_number] = 0.0
-                pred = [p[:l] for l, p in zip(seq_lengths, pred)]
-                pred = [np.argmax(elem, axis=-1) for elem in pred]
+        if self.use_crf:
+            pred = self._decode_crf(feed_dict)
         else:
-            pred = self.sess.run(self.y_probas, feed_dict=feed_dict)
+            pred, seq_lengths = self.sess.run([self.y_probas, self.seq_lengths], feed_dict=feed_dict)
+            pred[:,:,:self.idle_tags_number] = 0.0
+            pred = [p[:l] for l, p in zip(seq_lengths, pred)]
+        if not self.return_probas:
+            pred = [np.argmax(elem, axis=-1) for elem in pred]
         return pred
+
+    def get_train_op(self, loss: tf.Tensor, learning_rate: Union[tf.Tensor, float], **kwargs) -> tf.Operation:
+        assert "learnable_scopes" not in kwargs, "learnable scopes unsupported"
+        # train_op for bert variables
+        kwargs['learnable_scopes'] = ('bert/encoder', 'bert/embeddings')
+        if self.freeze_embeddings:
+            kwargs['learnable_scopes'] = ('bert/encoder',)
+        # if self.use_birnn:
+        #     kwargs['learnable_scopes'] += ('birnn',)
+        bert_learning_rate = learning_rate * self.bert_learning_rate_multiplier
+        bert_train_op = super(LRScheduledTFModel, self).get_train_op(loss,
+                                                                     bert_learning_rate,
+                                                                     **kwargs)
+        # train_op for ner head variables
+        
+        kwargs['learnable_scopes'] = ('ner',)
+        head_train_op = super(LRScheduledTFModel, self).get_train_op(loss,
+                                                                     learning_rate,
+                                                                     **kwargs)
+        groups = [bert_train_op, head_train_op]
+        if self.use_birnn and self.exclude_birnn_scope:
+            kwargs['learnable_scopes'] = ('birnn',)
+            rnn_train_op = super(LRScheduledTFModel, self).get_train_op(loss,
+                                                                        0.1 * learning_rate,
+                                                                        **kwargs)
+            groups.append(rnn_train_op)                                
+        return tf.group(*groups)
 
 
 class ExponentialMovingAverage:
