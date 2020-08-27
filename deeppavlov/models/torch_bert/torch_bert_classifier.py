@@ -62,6 +62,7 @@ class TorchBertClassifierModel(TorchModel):
                  optimizer_parameters: dict = {"lr": 1e-3, "weight_decay": 0.01, "betas": (0.9, 0.999), "eps": 1e-6},
                  clip_norm: Optional[float] = None,
                  bert_config_file: Optional[str] = None,
+                 vocab_size: Optional[int] = None,
                  **kwargs) -> None:
 
         self.return_probas = return_probas
@@ -73,6 +74,7 @@ class TorchBertClassifierModel(TorchModel):
         self.hidden_keep_prob = hidden_keep_prob
         self.n_classes = n_classes
         self.clip_norm = clip_norm
+        self.vocab_size = vocab_size
 
         if self.multilabel and not self.one_hot_labels:
             raise RuntimeError('Use one-hot encoded labels for multilabel classification!')
@@ -171,6 +173,13 @@ class TorchBertClassifierModel(TorchModel):
             raise ConfigError("No pre-trained BERT model is given.")
 
         self.model.to(self.device)
+
+        if self.vocab_size:
+            vocab_size = self.model.get_input_embeddings().weight.shape[0]
+            self.model.resize_token_embeddings(self.vocab_size)
+            new_vocab_size = self.model.get_input_embeddings().weight.shape[0]
+            if vocab_size != new_vocab_size:
+                log.info(f"Embeddings matrix size has changed from {vocab_size} to {new_vocab_size}")
 
         self.optimizer = getattr(torch.optim, self.optimizer_name)(
             self.model.parameters(), **self.optimizer_parameters)
