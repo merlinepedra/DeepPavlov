@@ -179,7 +179,7 @@ class TorchBertClassifierModel(TorchModel):
             self.model.resize_token_embeddings(self.vocab_size)
             new_vocab_size = self.model.get_input_embeddings().weight.shape[0]
             if vocab_size != new_vocab_size:
-                log.info(f"Embeddings matrix size has changed from {vocab_size} to {new_vocab_size}")
+                log.info(f"Embeddings matrix size was changed from {vocab_size} to {new_vocab_size}")
 
         self.optimizer = getattr(torch.optim, self.optimizer_name)(
             self.model.parameters(), **self.optimizer_parameters)

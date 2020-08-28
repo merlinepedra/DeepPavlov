@@ -18,7 +18,8 @@ from logging import getLogger
 from pathlib import Path
 from typing import Tuple, List, Optional, Union
 
-from transformers import BertTokenizer
+import torch
+from transformers import BertTokenizer, PreTrainedTokenizer
 from transformers.data.processors.utils import InputFeatures
 
 from deeppavlov.core.commands.utils import expand_path
@@ -291,3 +292,32 @@ class TorchBertRankerPreprocessor(TorchBertPreprocessor):
             input_features.append(sub_list_features)
 
         return input_features
+
+
+@register('torch_mem_tokens_preprocessor')
+class TorchMemTokensPreprocessor(Component):
+    def __init__(self, tokenizer: PreTrainedTokenizer,
+                 mem_size: int = 10, mem_tokens_unique: bool = True, **kwargs) -> None:
+        self.tokenizer = tokenizer
+        self.mem_size = mem_size
+        self.mem_tokens_unique = mem_tokens_unique
+
+        vocab_size = len(self.tokenizer)
+        if self.mem_tokens_unique:
+            mem = [vocab_size + i for i in range(self.mem_size)]
+        else:
+            mem = [vocab_size] * self.mem_size
+
+        self.mem = torch.tensor(mem).unsqueeze(-2)
+        self.token_type_ids = torch.zeros_like(self.mem)
+        self.attention_mask = torch.ones_like(self.mem)
+
+    def __call__(self, batch: List[InputFeatures]) -> List[InputFeatures]:
+        for x in batch:
+            x.input_ids = torch.cat([x.input_ids[:, :1], self.mem, x.input_ids[:, 1:]], dim=1)
+            x.token_type_ids = torch.cat([x.token_type_ids[:, :1], self.token_type_ids, x.token_type_ids[:, 1:]], dim=1)
+            x.attention_mask = torch.cat([x.attention_mask[:, :1], self.attention_mask, x.attention_mask[:, 1:]], dim=1)
+        return batch
+
+    def __len__(self) -> int:
+        return len(self.tokenizer) + self.mem_size
