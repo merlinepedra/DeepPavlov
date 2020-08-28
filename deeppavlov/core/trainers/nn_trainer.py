@@ -88,7 +88,7 @@ class NNTrainer(FitTrainer):
 
     """
 
-    def __init__(self, chainer_config: dict, *, 
+    def __init__(self, chainer_config: dict, *,
                  batch_size: int = 1,
                  epochs: int = -1,
                  start_epoch_num: int = 0,
@@ -103,6 +103,7 @@ class NNTrainer(FitTrainer):
                  validate_first: bool = True,
                  validation_patience: int = 5, val_every_n_epochs: int = -1, val_every_n_batches: int = -1,
                  log_every_n_batches: int = -1, log_every_n_epochs: int = -1, log_on_k_batches: int = 1,
+                 warmup_steps: int = 0,
                  **kwargs) -> None:
         super().__init__(chainer_config, batch_size=batch_size, metrics=metrics, evaluation_targets=evaluation_targets,
                          show_examples=show_examples, tensorboard_log_dir=tensorboard_log_dir,
@@ -134,6 +135,7 @@ class NNTrainer(FitTrainer):
         self.log_every_n_epochs = log_every_n_epochs
         self.log_every_n_batches = log_every_n_batches
         self.log_on_k_batches = log_on_k_batches if log_on_k_batches >= 0 else None
+        self.warmup_steps = warmup_steps
 
         self.max_epochs = epochs
         self.epoch = start_epoch_num
@@ -191,7 +193,8 @@ class NNTrainer(FitTrainer):
         else:
             if self.improved(score, self.score_best):
                 self.patience = 0
-            else:
+            elif self.train_batches_seen > self.warmup_steps:
+                # update patience only if warmup is finished
                 self.patience += 1
 
         # Run the validation model-saving logic
@@ -280,6 +283,7 @@ class NNTrainer(FitTrainer):
             impatient = False
             self._send_event(event_name='before_train')
             for x, y_true in iterator.gen_batches(self.batch_size, data_type='train'):
+                self._send_event(event_name='before_batch')
                 self.last_result = self._chainer.train_on_batch(x, y_true)
                 if self.last_result is None:
                     self.last_result = {}

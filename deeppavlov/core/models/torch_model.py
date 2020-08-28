@@ -70,6 +70,7 @@ class TorchModel(NNModel):
                  learning_rate_drop_div: Optional[float] = None,
                  load_before_drop: bool = True,
                  min_learning_rate: float = 0.,
+                 warmup_steps: int = 0,
                  *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.device = torch.device("cuda" if torch.cuda.is_available() and device == "gpu" else "cpu")
@@ -88,6 +89,7 @@ class TorchModel(NNModel):
         self.learning_rate_drop_div = learning_rate_drop_div
         self.load_before_drop = load_before_drop
         self.min_learning_rate = min_learning_rate
+        self.warmup_steps = warmup_steps
         # TODO: replace opt dict with explicit arguments/structure
         self.opt = deepcopy(kwargs)
 
@@ -222,6 +224,24 @@ class TorchModel(NNModel):
                     self.model.eval()
                 for param_group in self.optimizer.param_groups:
                     param_group['lr'] = max(param_group['lr'] / self.learning_rate_drop_div, self.min_learning_rate)
+
+        if event_name == "before_batch" and self.warmup_steps > 0:
+            # learning rate warm-up (linear)
+            # currently may conflict with patience, set patience (in echochs) > warmup_steps (in batches)
+            # todo: trainer should be awared of warm-up to turn off patience
+            curr_step = data['batches_seen']
+            if curr_step == 0:
+                log.info(f"----------Starting learning rate warm-up for {self.warmup_steps} steps----------")
+                self._initial_lr = []
+                for param_group in self.optimizer.param_groups:
+                    self._initial_lr += [param_group['lr']]
+            if curr_step < self.warmup_steps:
+                lr_mutliplier = (curr_step + 1) / self.warmup_steps
+                for i, param_group in enumerate(self.optimizer.param_groups):
+                    param_group['lr'] = lr_mutliplier * self._initial_lr[i]
+
+            if curr_step == self.warmup_steps:
+                log.info(f"----------Learning rate warm-up finished----------")
 
     @abstractmethod
     def train_on_batch(self, x: list, y: list):
