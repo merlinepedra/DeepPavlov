@@ -227,8 +227,6 @@ class TorchModel(NNModel):
 
         if event_name == "before_batch" and self.warmup_steps > 0:
             # learning rate warm-up (linear)
-            # currently may conflict with patience, set patience (in echochs) > warmup_steps (in batches)
-            # todo: trainer should be awared of warm-up to turn off patience
             curr_step = data['batches_seen']
             if curr_step == 0:
                 log.info(f"----------Starting learning rate warm-up for {self.warmup_steps} steps----------")
