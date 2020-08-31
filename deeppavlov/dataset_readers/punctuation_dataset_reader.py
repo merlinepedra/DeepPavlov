@@ -95,7 +95,7 @@ def read_punctuation_file(infile, to_tokenize=False, max_sents=-1,
 @register('ud_punctuation_dataset_reader')
 class UDPunctuationDatasetReader(DatasetReader):
 
-    def read(self, data_path: Dict, data_types: Optional[List[str]] = None,
+    def read(self, data_path: List, data_types: Optional[List[str]] = None,
              data_formats=None, skip_short_test_sentences=True, **kwargs) -> Dict[str, List]:
         """Reads UD dataset from data_path.
 
