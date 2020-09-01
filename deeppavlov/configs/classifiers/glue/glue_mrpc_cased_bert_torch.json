@@ -107,7 +107,7 @@
     ]
   },
   "train": {
-    "batch_size": 128,
+    "batch_size": 100,
     "metrics": [
       {
         "name": "f1",
