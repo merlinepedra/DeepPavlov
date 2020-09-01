@@ -234,9 +234,9 @@ class TorchModel(NNModel):
                 for param_group in self.optimizer.param_groups:
                     self._initial_lr += [param_group['lr']]
             if curr_step < self.warmup_steps:
-                lr_mutliplier = (curr_step + 1) / self.warmup_steps
+                lr_multiplier = (curr_step + 1) / self.warmup_steps
                 for i, param_group in enumerate(self.optimizer.param_groups):
-                    param_group['lr'] = lr_mutliplier * self._initial_lr[i]
+                    param_group['lr'] = lr_multiplier * self._initial_lr[i]
 
             if curr_step == self.warmup_steps:
                 log.info(f"----------Learning rate warm-up finished----------")
