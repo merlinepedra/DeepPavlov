@@ -5,7 +5,7 @@
     "pipe": [
       {
         "class_name": "question_sign_checker",
-        "in": ["x_init"],
+        "in": ["x"],
         "out": ["x_temp"]
       },
       {
