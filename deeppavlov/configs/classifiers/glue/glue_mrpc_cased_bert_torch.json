@@ -136,7 +136,7 @@
       "ROOT_PATH": "~/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
-      "MODEL_PATH": "{MODELS_PATH}/classifiers/glue_sst_torch_cased_bert"
+      "MODEL_PATH": "{MODELS_PATH}/classifiers/glue_mrpc_torch_cased_bert"
     },
     "requirements": [
       "{DEEPPAVLOV_PATH}/requirements/pytorch.txt",
