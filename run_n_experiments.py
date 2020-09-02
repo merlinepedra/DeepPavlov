@@ -30,11 +30,11 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
             print(f'mem_size is set to {mem_size}')
 
     # get model path
+    if mem_size_changed:
+        config['metadata']['variables']['MODEL_PATH'] += f'_{mem_size}'
     model_path = config['metadata']['variables']['MODEL_PATH']
     while '{' in model_path and '}' in model_path:
         model_path = model_path.format(**config['metadata']['variables'])
-    if mem_size_changed:
-        model_path = f'{model_path}_{mem_size}'
     model_path = Path(model_path).expanduser()
     # run experiments
     total_metrics = defaultdict(dict)
