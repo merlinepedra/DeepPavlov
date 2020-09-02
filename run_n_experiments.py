@@ -17,14 +17,14 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
     print(f'Running {n_runs} experiments for {config}')
     config = json.load(open(config, 'r'))
     # set mem_size
+    mem_size_changed = False
     if mem_size != 0:
-        mem_set = False
         for i in range(len(config['chainer']['pipe'])):
             if config['chainer']['pipe'][i]['class_name'] == 'torch_mem_tokens_preprocessor':
                 config['chainer']['pipe'][i]['mem_size'] = mem_size
-                mem_set = True
+                mem_size_changed = True
                 break
-        if not mem_set:
+        if not mem_size_changed:
             print('config file does not support mem_size argument')
         else:
             print(f'mem_size is set to {mem_size}')
@@ -33,6 +33,8 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
     model_path = config['metadata']['variables']['MODEL_PATH']
     while '{' in model_path and '}' in model_path:
         model_path = model_path.format(**config['metadata']['variables'])
+    if mem_size_changed:
+        model_path = f'{model_path}_{mem_size}'
     model_path = Path(model_path).expanduser()
     # run experiments
     total_metrics = defaultdict(dict)
