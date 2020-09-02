@@ -12,14 +12,13 @@ from deeppavlov import evaluate_model, train_model
 
 def main(config: str = typer.Argument(..., help='config to run experiment'),
          n_runs: int = typer.Option(5, '--n_runs', '-n', help='n runs of experiment'),
-         mem_size: int = typer.Option(0, '--mem_size', '-m', help='set mem_size in mem config')
+         mem_size: int = typer.Option(0, '--mem_size', '-m', help='change mem_size in mem config')
          ) -> None:
     print(f'Running {n_runs} experiments for {config}')
     config = json.load(open(config, 'r'))
     # set mem_size
     if mem_size != 0:
         mem_set = False
-        mem_size = 15
         for i in range(len(config['chainer']['pipe'])):
             if config['chainer']['pipe'][i]['class_name'] == 'torch_mem_tokens_preprocessor':
                 config['chainer']['pipe'][i]['mem_size'] = mem_size
