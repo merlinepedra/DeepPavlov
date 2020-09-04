@@ -15,24 +15,16 @@
     "seed": 42
   },
   "chainer": {
-    "in": [
-      "sentence1", "sentence2"
-    ],
-    "in_y": [
-      "y_ids"
-    ],
+    "in": ["sentence1", "sentence2"],
+    "in_y": ["y_ids"],
     "pipe": [
       {
         "class_name": "torch_bert_preprocessor",
         "vocab_file": "bert-base-cased",
         "do_lower_case": false,
         "max_seq_length": 100,
-        "in": [
-          "sentence1", "sentence2"
-        ],
-        "out": [
-          "bert_features"
-        ]
+        "in": ["sentence1", "sentence2"],
+        "out": ["bert_features"]
       },
       {
         "in": ["y_ids"],
@@ -65,9 +57,7 @@
         "max_proba": true
       }
     ],
-    "out": [
-      "y_pred_ids"
-    ]
+    "out": ["y_pred_ids"]
   },
   "train": {
     "batch_size": 100,
