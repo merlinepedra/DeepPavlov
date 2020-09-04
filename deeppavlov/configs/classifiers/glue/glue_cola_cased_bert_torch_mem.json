@@ -24,7 +24,7 @@
       {
         "id": "preprocessor",
         "class_name": "torch_bert_preprocessor",
-        "vocab_file": "bert-base-cased",
+        "vocab_file": "{BASE_MODEL}",
         "do_lower_case": false,
         "max_seq_length": 64,
         "in": [
@@ -74,7 +74,7 @@
         "n_classes": "#classes_vocab.len",
         "vocab_size": "#mem_preprocessor.__len__()",
         "return_probas": true,
-        "pretrained_bert": "bert-base-cased",
+        "pretrained_bert": "{BASE_MODEL}",
         "save_path": "{MODEL_PATH}/model",
         "load_path": "{MODEL_PATH}/model",
         "optimizer": "AdamW",
@@ -138,7 +138,8 @@
       "ROOT_PATH": "~/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
-      "MODEL_PATH": "{MODELS_PATH}/classifiers/glue_cola_torch_cased_bert_mem"
+      "MODEL_PATH": "{MODELS_PATH}/classifiers/glue_cola_torch_cased_bert_mem",
+      "BASE_MODEL": "bert-base-cased"
     },
     "requirements": [
       "{DEEPPAVLOV_PATH}/requirements/pytorch.txt",

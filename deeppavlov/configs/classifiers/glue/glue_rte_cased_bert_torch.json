@@ -19,7 +19,7 @@
     "pipe": [
       {
         "class_name": "torch_bert_preprocessor",
-        "vocab_file": "bert-base-cased",
+        "vocab_file": "{BASE_MODEL}",
         "do_lower_case": false,
         "max_seq_length": 256,
         "in": ["sentence1", "sentence2"],
@@ -45,7 +45,7 @@
         "class_name": "torch_bert_classifier",
         "n_classes": "#classes_vocab.len",
         "return_probas": true,
-        "pretrained_bert": "bert-base-cased",
+        "pretrained_bert": "{BASE_MODEL}",
         "save_path": "{MODEL_PATH}/model",
         "load_path": "{MODEL_PATH}/model",
         "optimizer": "AdamW",
@@ -93,7 +93,8 @@
       "ROOT_PATH": "~/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
-      "MODEL_PATH": "{MODELS_PATH}/classifiers/glue_rte_torch_cased_bert"
+      "MODEL_PATH": "{MODELS_PATH}/classifiers/glue_rte_torch_cased_bert",
+      "BASE_MODEL": "bert-base-cased"
     },
     "requirements": [
       "{DEEPPAVLOV_PATH}/requirements/pytorch.txt",
