@@ -16,9 +16,10 @@ import re
 import random
 from logging import getLogger
 from pathlib import Path
-from typing import Tuple, List, Optional, Union
+from typing import Tuple, List, Optional, Union, Any
 
 import torch
+import numpy as np
 from transformers import BertTokenizer, PreTrainedTokenizer
 from transformers.data.processors.utils import InputFeatures
 
@@ -321,3 +322,25 @@ class TorchMemTokensPreprocessor(Component):
 
     def __len__(self) -> int:
         return len(self.tokenizer) + self.mem_size
+
+
+@register('add_value')
+class AddValuePreprocessor(Component):
+    """Adds value to all elemnts of batch, value is scalar-like: int, float, str, ...
+    """
+    def __init__(self, value: Any, value_type: Optional[str] = None, min_value: Optional[Any] = None,
+                 **kwargs) -> None:
+        self.value = value
+        self.min_value = min_value
+        if value_type:
+            self.value = eval(value_type)(self.value)
+            self.min_value = eval(value_type)(self.min_value)
+
+    def __call__(self, batch: Union[List, np.ndarray]) -> List:
+        result = []
+        for x in batch:
+            if isinstance(x, list) or isinstance(x, np.ndarray):
+                result += [self(x)]
+            else:
+                result += [max(x + self.value, self.min_value) if self.min_value else x + self.value]
+        return result

@@ -79,6 +79,7 @@ class TorchBertSQuADModel(TorchModel):
                  load_before_drop: bool = True,
                  clip_norm: Optional[float] = None,
                  min_learning_rate: float = 1e-06,
+                 vocab_size: Optional[int] = None,
                  **kwargs) -> None:
 
         self.attention_probs_keep_prob = attention_probs_keep_prob
@@ -87,6 +88,7 @@ class TorchBertSQuADModel(TorchModel):
 
         self.pretrained_bert = pretrained_bert
         self.bert_config_file = bert_config_file
+        self.vocab_size = vocab_size
 
         super().__init__(optimizer=optimizer,
                          optimizer_parameters=optimizer_parameters,
@@ -220,6 +222,14 @@ class TorchBertSQuADModel(TorchModel):
             raise ConfigError("No pre-trained BERT model is given.")
 
         self.model.to(self.device)
+
+        if self.vocab_size:
+            vocab_size = self.model.get_input_embeddings().weight.shape[0]
+            self.model.resize_token_embeddings(self.vocab_size)
+            new_vocab_size = self.model.get_input_embeddings().weight.shape[0]
+            if vocab_size != new_vocab_size:
+                logger.info(f"Embeddings matrix size was changed from {vocab_size} to {new_vocab_size}")
+
         self.optimizer = getattr(torch.optim, self.optimizer_name)(
             self.model.parameters(), **self.optimizer_parameters)
         if self.lr_scheduler_name is not None:
