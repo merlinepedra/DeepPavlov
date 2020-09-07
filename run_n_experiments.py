@@ -23,7 +23,7 @@ def change_component(config, component, field, value):
 def main(config: str = typer.Argument(..., help='config to run experiment'),
          n_runs: int = typer.Option(5, '--n_runs', '-n', help='n runs of experiment'),
          mem_size: int = typer.Option(0, '--mem_size', '-m', help='change mem_size in mem config'),
-         base_model: str = typer.Option(None, '--base_model', '-m', help='pretrained model'),
+         base_model: str = typer.Option(None, '--base_model', '-bm', help='pretrained model'),
          do_lower_case: bool = typer.Option(False, '--do_lower_case',  help='use lowercase in tokenizer'),
          batch_size: int = typer.Option(None, '--batch_size', '-bs', help='change batch_size used in base config')
          ) -> None:
