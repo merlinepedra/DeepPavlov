@@ -63,6 +63,8 @@ class TorchBertClassifierModel(TorchModel):
                  clip_norm: Optional[float] = None,
                  bert_config_file: Optional[str] = None,
                  vocab_size: Optional[int] = None,
+                 output_attentions: Optional[bool] = False,
+                 output_hidden_states: Optional[bool] = False,
                  **kwargs) -> None:
 
         self.return_probas = return_probas
@@ -75,6 +77,8 @@ class TorchBertClassifierModel(TorchModel):
         self.n_classes = n_classes
         self.clip_norm = clip_norm
         self.vocab_size = vocab_size
+        self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
 
         if self.multilabel and not self.one_hot_labels:
             raise RuntimeError('Use one-hot encoded labels for multilabel classification!')
@@ -106,8 +110,9 @@ class TorchBertClassifierModel(TorchModel):
 
         self.optimizer.zero_grad()
 
-        loss, logits = self.model(b_input_ids, token_type_ids=None, attention_mask=b_input_masks,
-                                  labels=b_labels)
+        outputs = self.model(b_input_ids, token_type_ids=None, attention_mask=b_input_masks,
+                             labels=b_labels)
+        loss = outputs[0]
         loss.backward()
         # Clip the norm of the gradients to 1.0.
         # This is to help prevent the "exploding gradients" problem.
@@ -138,8 +143,8 @@ class TorchBertClassifierModel(TorchModel):
 
         with torch.no_grad():
             # Forward pass, calculate logit predictions
-            logits = self.model(b_input_ids, token_type_ids=None, attention_mask=b_input_masks)
-            logits = logits[0]
+            output = self.model(b_input_ids, token_type_ids=None, attention_mask=b_input_masks)
+            logits = output[0]
 
         if self.return_probas:
             if not self.multilabel:
@@ -150,6 +155,9 @@ class TorchBertClassifierModel(TorchModel):
         else:
             logits = logits.detach().cpu().numpy()
             pred = np.argmax(logits, axis=1)
+
+        if self.output_attentions or self.output_hidden_states:
+            return pred, output[1:]
         return pred
 
     @overrides
@@ -160,7 +168,7 @@ class TorchBertClassifierModel(TorchModel):
         if self.pretrained_bert and not Path(self.pretrained_bert).is_file():
             self.model = BertForSequenceClassification.from_pretrained(
                 self.pretrained_bert, num_labels=self.n_classes,
-                output_attentions=False, output_hidden_states=False)
+                output_attentions=self.output_attentions, output_hidden_states=self.output_hidden_states)
         elif self.bert_config_file and Path(self.bert_config_file).is_file():
             self.bert_config = BertConfig.from_json_file(str(expand_path(self.bert_config_file)))
 
