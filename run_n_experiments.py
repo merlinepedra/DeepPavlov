@@ -25,7 +25,8 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
          mem_size: int = typer.Option(0, '--mem_size', '-m', help='change mem_size in mem config'),
          base_model: str = typer.Option(None, '--base_model', '-bm', help='pretrained model'),
          do_lower_case: bool = typer.Option(False, '--do_lower_case',  help='use lowercase in tokenizer'),
-         batch_size: int = typer.Option(None, '--batch_size', '-bs', help='change batch_size used in base config')
+         batch_size: int = typer.Option(None, '--batch_size', '-bs', help='change batch_size used in base config'),
+         pool_mem: bool = typer.Option(False, '--pool_mem', help='get pooled output as [max(mem),mean(mem)]')
          ) -> None:
     print(f'Running {n_runs} experiments for {config}')
     config = json.load(open(config, 'r'))
@@ -47,9 +48,19 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
     if batch_size:
         config['train']['batch_size'] = batch_size
 
+    if pool_mem:
+        if mem_size == 0:
+            print(f'pool_mem is set to {pool_mem}, but mem_size is {mem_size}')
+            exit(1)
+        config, _ = change_component(config, 'torch_bert_classifier', 'mem_size', mem_size)
+        config, _ = change_component(config, 'torch_bert_classifier', 'pool_mem_tokens', pool_mem)
+        print(f'pool_mem_tokens is set to {pool_mem}')
+
     # get model path
     if mem_size_changed:
         config['metadata']['variables']['MODEL_PATH'] += f'_{mem_size}'
+    if pool_mem:
+        config['metadata']['variables']['MODEL_PATH'] += f'_pool_mem'
     if base_model:
         config['metadata']['variables']['MODEL_PATH'] += f'_{base_model}'
     model_path = config['metadata']['variables']['MODEL_PATH']

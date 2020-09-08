@@ -65,6 +65,8 @@ class TorchBertClassifierModel(TorchModel):
                  vocab_size: Optional[int] = None,
                  output_attentions: Optional[bool] = False,
                  output_hidden_states: Optional[bool] = False,
+                 pool_mem_tokens: Optional[bool] = False,
+                 mem_size: Optional[int] = 0,
                  **kwargs) -> None:
 
         self.return_probas = return_probas
@@ -74,11 +76,17 @@ class TorchBertClassifierModel(TorchModel):
         self.bert_config_file = bert_config_file
         self.attention_probs_keep_prob = attention_probs_keep_prob
         self.hidden_keep_prob = hidden_keep_prob
+        # todo: if n_classes == 1 solve regression task (HF sequence classification models have such logic)
+        # todo: add normalization preprocessor and postprocessor
         self.n_classes = n_classes
         self.clip_norm = clip_norm
         self.vocab_size = vocab_size
         self.output_attentions = output_attentions
         self.output_hidden_states = output_hidden_states
+
+        # expr args:
+        self.pool_mem_tokens = pool_mem_tokens
+        self.mem_size = mem_size
 
         if self.multilabel and not self.one_hot_labels:
             raise RuntimeError('Use one-hot encoded labels for multilabel classification!')
@@ -110,6 +118,7 @@ class TorchBertClassifierModel(TorchModel):
 
         self.optimizer.zero_grad()
 
+        # todo: fix token_type_ids usage
         outputs = self.model(b_input_ids, token_type_ids=None, attention_mask=b_input_masks,
                              labels=b_labels)
         loss = outputs[0]
@@ -143,6 +152,7 @@ class TorchBertClassifierModel(TorchModel):
 
         with torch.no_grad():
             # Forward pass, calculate logit predictions
+            # todo: fix token_type_ids usage
             output = self.model(b_input_ids, token_type_ids=None, attention_mask=b_input_masks)
             logits = output[0]
 
@@ -179,6 +189,28 @@ class TorchBertClassifierModel(TorchModel):
             self.model = BertForSequenceClassification(config=self.bert_config)
         else:
             raise ConfigError("No pre-trained BERT model is given.")
+
+        if self.pool_mem_tokens and self.mem_size != 0:
+            # modify pooling strategy
+            class BertPooler(torch.nn.Module):
+                def __init__(self, hidden_size=768, pool_start=0, pool_end=1):
+                    super().__init__()
+                    self.pool_start = pool_start
+                    self.pool_end = pool_end
+                    self.dense = torch.nn.Linear(hidden_size * 2, hidden_size)
+                    self.activation = torch.nn.Tanh()
+
+                def forward(self, hidden_states):
+                    to_pool = hidden_states[:, self.pool_start:self.pool_end]
+                    max_pooled, _ = torch.max(to_pool, dim=1)
+                    mean_pooled = torch.mean(to_pool, dim=1)
+                    pooled = torch.cat([max_pooled, mean_pooled], dim=-1)
+                    pooled_output = self.dense(pooled)
+                    pooled_output = self.activation(pooled_output)
+                    return pooled_output
+
+            self.model.bert.pooler = BertPooler(hidden_size=self.model.config.hidden_size,
+                                                pool_start=1, pool_end=1+self.mem_size)
 
         self.model.to(self.device)
 
