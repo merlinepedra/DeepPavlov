@@ -34,9 +34,6 @@ for n, sample in enumerate(data):
     entities_list = []
     entities = re.findall(r'wd:(Q\d*)', query)
     res = model([question])
-    out.write(question+'\n')
-    out.write(str(res)+'\n')
-    out.write(str(entities)+'\n')
     if res[2][0]:
         inter += len(set(res[2][0]).intersection(set(entities)))
         found += len(res[2][0])
