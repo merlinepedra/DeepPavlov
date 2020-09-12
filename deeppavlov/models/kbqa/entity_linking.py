@@ -312,34 +312,36 @@ class EntityLinker(Component, Serializable):
                                   for entity_substr in entity_substr_list]
             words_and_indices = [(self.morph_parse(word), i) for i, entity_substr in enumerate(entity_substr_list)
                                  for word in entity_substr]
-            substr_lens = [len(entity_substr) for entity_substr in entity_substr_list]
-            log.debug(f"words and indices {words_and_indices}")
-            words, indices = zip(*words_and_indices)
-            words = list(words)
-            indices = list(indices)
-            log.debug(f"words {words}")
-            log.debug(f"indices {indices}")
-            ent_substr_tfidfs = self.vectorizer.transform(words).toarray().astype(np.float32)
-            D, I = self.faiss_index.search(ent_substr_tfidfs, self.num_faiss_candidate_entities)
-            candidate_entities_dict = defaultdict(list)
-            for ind_list, scores_list, index in zip(I, D, indices):
-                if self.num_faiss_cells > 1:
-                    scores_list = [1.0 - score for score in scores_list]
-                candidate_entities = {}
-                for ind, score in zip(ind_list, scores_list):
-                    start_ind, end_ind = self.word_to_idlist[self.word_list[ind]]
-                    for entity in self.entities_list[start_ind:end_ind]:
-                        if entity in candidate_entities:
-                            if score > candidate_entities[entity]:
+            candidate_entities_total = []
+            if words_and_indices:
+                substr_lens = [len(entity_substr) for entity_substr in entity_substr_list]
+                log.debug(f"words and indices {words_and_indices}")
+                words, indices = zip(*words_and_indices)
+                words = list(words)
+                indices = list(indices)
+                log.debug(f"words {words}")
+                log.debug(f"indices {indices}")
+                ent_substr_tfidfs = self.vectorizer.transform(words).toarray().astype(np.float32)
+                D, I = self.faiss_index.search(ent_substr_tfidfs, self.num_faiss_candidate_entities)
+                candidate_entities_dict = defaultdict(list)
+                for ind_list, scores_list, index in zip(I, D, indices):
+                    if self.num_faiss_cells > 1:
+                        scores_list = [1.0 - score for score in scores_list]
+                    candidate_entities = {}
+                    for ind, score in zip(ind_list, scores_list):
+                        start_ind, end_ind = self.word_to_idlist[self.word_list[ind]]
+                        for entity in self.entities_list[start_ind:end_ind]:
+                            if entity in candidate_entities:
+                                if score > candidate_entities[entity]:
+                                    candidate_entities[entity] = score
+                            else:
                                 candidate_entities[entity] = score
-                        else:
-                            candidate_entities[entity] = score
-                candidate_entities_dict[index] += [(entity, cand_entity_len, score)
-                                                for (entity, cand_entity_len), score in candidate_entities.items()]
-                log.debug(f"{index} candidate_entities {[self.word_list[ind] for ind in ind_list[:10]]}")
-            candidate_entities_total = list(candidate_entities_dict.values())
-            candidate_entities_total = [self.sum_scores(candidate_entities, substr_len)
-                              for candidate_entities, substr_len in zip(candidate_entities_total, substr_lens)]
+                    candidate_entities_dict[index] += [(entity, cand_entity_len, score)
+                                                    for (entity, cand_entity_len), score in candidate_entities.items()]
+                    log.debug(f"{index} candidate_entities {[self.word_list[ind] for ind in ind_list[:10]]}")
+                candidate_entities_total = list(candidate_entities_dict.values())
+                candidate_entities_total = [self.sum_scores(candidate_entities, substr_len)
+                                  for candidate_entities, substr_len in zip(candidate_entities_total, substr_lens)]
             log.debug(f"length candidate entities list {len(candidate_entities_total)}")
             candidate_entities_list = []
             entities_scores_list = []
@@ -414,8 +416,9 @@ class EntityLinker(Component, Serializable):
             entities_with_scores = sorted(entities_with_scores, key=lambda x: (x[1], x[3], x[2]), reverse=True)
             log.debug(f"entities_with_scores {entities_with_scores}")
             top_entities = [score[0] for score in entities_with_scores]
-            if self.num_entities_to_return == 1:
-                entity_ids_list.append(top_entities[0])
-            else:
-                entity_ids_list.append(top_entities[:self.num_entities_to_return])
+            if top_entities:
+                if self.num_entities_to_return == 1:
+                    entity_ids_list.append(top_entities[0])
+                else:
+                    entity_ids_list.append(top_entities[:self.num_entities_to_return])
         return entity_ids_list
