@@ -1,3 +1,5 @@
+#pip install git+https://github.com/deepmipt/DeepPavlov.git@entity_linking_test
+
 import json
 import re
 
