@@ -89,6 +89,7 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
     print(config)
     print('-' * 15)
     print(total_metrics)
+    json.dump(total_metrics, model_path / 'metrics.json'.open('w'), indent=2)
     for mode in total_metrics:
         print(mode)
         for metric in total_metrics[mode]:
