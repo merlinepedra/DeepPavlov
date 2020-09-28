@@ -100,6 +100,9 @@ class TorchBertClassifierModel(TorchModel):
         if self.multilabel and not self.return_probas:
             raise RuntimeError('Set return_probas to True for multilabel classification!')
 
+        if self.return_probas and self.n_classes == 1:
+            raise RuntimeError('Set return_probas to False for regression task!')
+
         super().__init__(optimizer=optimizer,
                          optimizer_parameters=optimizer_parameters,
                          **kwargs)
@@ -120,7 +123,7 @@ class TorchBertClassifierModel(TorchModel):
 
         b_input_ids = torch.cat(input_ids, dim=0).to(self.device)
         b_input_masks = torch.cat(input_masks, dim=0).to(self.device)
-        b_labels = torch.from_numpy(np.array(y)).to(self.device)
+        b_labels = torch.from_numpy(np.array(y, dtype=np.float32)).to(self.device)
 
         self.optimizer.zero_grad()
 
@@ -168,9 +171,11 @@ class TorchBertClassifierModel(TorchModel):
             else:
                 pred = torch.nn.functional.sigmoid(logits)
             pred = pred.detach().cpu().numpy()
-        else:
+        elif self.n_classes > 1:
             logits = logits.detach().cpu().numpy()
             pred = np.argmax(logits, axis=1)
+        else:  # regression
+            pred = logits.squeeze(-1).detach().cpu().numpy()
 
         if self.output_attentions or self.output_hidden_states:
             return pred, output[1:]
