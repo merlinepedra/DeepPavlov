@@ -67,6 +67,9 @@ class TorchBertClassifierModel(TorchModel):
                  output_hidden_states: Optional[bool] = False,
                  pool_mem_tokens: Optional[bool] = False,
                  mem_size: Optional[int] = 0,
+                 only_head: Optional[bool] = False,
+                 random_init: Optional[bool] = False,
+                 mean_max_pool: Optional[bool] = False,
                  **kwargs) -> None:
 
         self.return_probas = return_probas
@@ -87,6 +90,9 @@ class TorchBertClassifierModel(TorchModel):
         # expr args:
         self.pool_mem_tokens = pool_mem_tokens
         self.mem_size = mem_size
+        self.only_head = only_head
+        self.random_init = random_init
+        self.mean_max_pool = mean_max_pool
 
         if self.multilabel and not self.one_hot_labels:
             raise RuntimeError('Use one-hot encoded labels for multilabel classification!')
@@ -190,6 +196,9 @@ class TorchBertClassifierModel(TorchModel):
         else:
             raise ConfigError("No pre-trained BERT model is given.")
 
+        if self.random_init:
+            self.model.init_weights()
+
         if self.pool_mem_tokens and self.mem_size != 0:
             # modify pooling strategy
             class BertPooler(torch.nn.Module):
@@ -200,7 +209,7 @@ class TorchBertClassifierModel(TorchModel):
                     self.dense = torch.nn.Linear(hidden_size * 2, hidden_size)
                     self.activation = torch.nn.Tanh()
 
-                def forward(self, hidden_states):
+                def forward(self, hidden_states, attention_mask=None):
                     to_pool = hidden_states[:, self.pool_start:self.pool_end]
                     max_pooled, _ = torch.max(to_pool, dim=1)
                     mean_pooled = torch.mean(to_pool, dim=1)
@@ -211,6 +220,25 @@ class TorchBertClassifierModel(TorchModel):
 
             self.model.bert.pooler = BertPooler(hidden_size=self.model.config.hidden_size,
                                                 pool_start=1, pool_end=1+self.mem_size)
+
+        if self.mean_max_pool:
+            class BertPooler(torch.nn.Module):
+                def __init__(self, hidden_size=768):
+                    super().__init__()
+                    self.INF = 1e30
+                    self.dense = torch.nn.Linear(hidden_size * 2, hidden_size)
+                    self.activation = torch.nn.Tanh()
+
+                def forward(self, hidden_states, attention_mask=None):
+                    mask = attention_mask.unsqueeze(dim=-1)
+                    mean_pooled = (hidden_states * mask).sum(dim=1) / mask.sum(dim=1)
+                    max_pooled, _ = (hidden_states - (1 - mask) * self.INF).max(dim=1)
+                    pooled = torch.cat([max_pooled, mean_pooled], dim=-1)
+                    pooled_output = self.dense(pooled)
+                    pooled_output = self.activation(pooled_output)
+                    return pooled_output
+
+            self.model.bert.pooler = BertPooler(hidden_size=self.model.config.hidden_size)
 
         self.model.to(self.device)
 
@@ -246,3 +274,13 @@ class TorchBertClassifierModel(TorchModel):
                 self.epochs_done = checkpoint.get("epochs_done", 0)
             else:
                 log.info(f"Init from scratch. Load path {weights_path} does not exist.")
+
+        if self.only_head:
+            to_train = ['classifier.weight', 'classifier.bias']
+            if self.pool_mem_tokens or self.mean_max_pool:
+                to_train += [n for n, p in self.model.named_parameters() if 'bert.pooler' in n]
+            for name, p in self.model.named_parameters():
+                if name in to_train:
+                    p.requires_grad = True
+                else:
+                    p.requires_grad = False
