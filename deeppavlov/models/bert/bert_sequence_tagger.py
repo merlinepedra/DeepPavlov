@@ -632,8 +632,8 @@ class BertSequenceTagger(BertSequenceNetwork):
             pred, seq_lengths = self.sess.run([self.y_probas, self.seq_lengths], feed_dict=feed_dict)
             pred[:,:,:self.idle_tags_number] = 0.0
             pred = [p[:l] for l, p in zip(seq_lengths, pred)]
-        if not self.return_probas:
-            pred = [np.argmax(elem, axis=-1) for elem in pred]
+            if not self.return_probas:
+                pred = [np.argmax(elem, axis=-1) for elem in pred]
         return pred
 
     def get_train_op(self, loss: tf.Tensor, learning_rate: Union[tf.Tensor, float], **kwargs) -> tf.Operation:

@@ -172,6 +172,7 @@
   "ubuntu_v2_mt_reader": "deeppavlov.dataset_readers.ubuntu_v2_mt_reader:UbuntuV2MTReader",
   "ubuntu_v2_reader": "deeppavlov.dataset_readers.ubuntu_v2_reader:UbuntuV2Reader",
   "ud_punctuation_dataset_reader": "deeppavlov.dataset_readers.punctuation_dataset_reader:UDPunctuationDatasetReader",
+  "corrupted_punctuation_dataset_reader": "deeppavlov.dataset_readers.punctuation_dataset_reader:CorruptedPunctuationDatasetReader",
   "wiki_sqlite_vocab": "deeppavlov.vocabs.wiki_sqlite:WikiSQLiteVocab",
   "wikitionary_100K_vocab": "deeppavlov.vocabs.typos:Wiki100KDictionary"
 }
