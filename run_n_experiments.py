@@ -31,6 +31,7 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
          random_init: bool = typer.Option(False, '--random_init', help='train from full random initialization'),
          warmup_steps: int = typer.Option(0, '--warmup_steps', help='set warm-up steps'),
          mean_max_pool: bool = typer.Option(False, '--mean_max_pool', help='use mean & max_pool as pooler in BERT'),
+         tag: str = typer.Option('', '--tag', '-t', help='add custom text to the end of model path'),
          ) -> None:
     print(f'Running {n_runs} experiments for {config}')
     config = json.load(open(config, 'r'))
@@ -86,6 +87,8 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
         config['metadata']['variables']['MODEL_PATH'] += f'_rnd'
     if mean_max_pool:
         config['metadata']['variables']['MODEL_PATH'] += f'_pool_meanmax'
+    if tag:
+        config['metadata']['variables']['MODEL_PATH'] += f'_{tag}'
 
     model_path = config['metadata']['variables']['MODEL_PATH']
     while '{' in model_path and '}' in model_path:
