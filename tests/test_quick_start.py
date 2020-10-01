@@ -41,8 +41,8 @@ api_port = os.getenv('DP_PYTEST_API_PORT')
 if api_port is not None:
     api_port = int(api_port)
 
-TEST_MODES = ['IP',  # test_interacting_pretrained_model
-              'TI',  # test_consecutive_training_and_interacting
+TEST_MODES = ['IP',  # test_inferring_pretrained_model
+              'TI',  # test_consecutive_training_and_inferring
               'SR',  # test_serialization
               ]
 
@@ -55,8 +55,8 @@ FOUR_ARGUMENTS_INFER_CHECK = ('Dummy text', 'Dummy text', 'Dummy text', 'Dummy_t
 # Mapping from model name to config-model_dir-ispretrained and corresponding queries-response list.
 PARAMS = {
     "ecommerce_skill": {
-        ("ecommerce_skill/bleu_retrieve.json", "ecommerce_skill_bleu", ALL_MODES): [('Dummy text', '[]', '{}', None)],
-        ("ecommerce_skill/tfidf_retrieve.json", "ecommerce_skill_tfidf", ALL_MODES): [('Dummy text', '[]', '{}', None)]
+        ("ecommerce_skill/bleu_retrieve.json", "ecommerce_skill_bleu", ALL_MODES): [('Dummy text', [], {}, None)],
+        ("ecommerce_skill/tfidf_retrieve.json", "ecommerce_skill_tfidf", ALL_MODES): [('Dummy text', [], {}, None)]
     },
     "faq": {
         ("faq/tfidf_logreg_en_faq.json", "faq_tfidf_logreg_en", ALL_MODES): [ONE_ARGUMENT_INFER_CHECK],
@@ -68,24 +68,25 @@ PARAMS = {
     "spelling_correction": {
         ("spelling_correction/brillmoore_wikitypos_en.json", "error_model", ALL_MODES):
             [
-                ("helllo", "hello"),
-                ("datha", "data")
+                ("helllo", ("hello",)),
+                ("datha", ("data",))
             ],
         ("spelling_correction/brillmoore_kartaslov_ru.json", "error_model", ('IP',)):
             [
-                ("преведствую", "приветствую"),
-                ("я джва года дду эту игру", "я два года жду эту игру")
+                ("преведствую", ("приветствую",)),
+                ("я джва года дду эту игру", ("я два года жду эту игру",))
             ],
         ("spelling_correction/levenshtein_corrector_ru.json", "error_model", ('IP',)):
             [
-                ("преветствую", "приветствую"),
-                ("Я джва года хочу такую игру", "я два года хочу такую игру")
+                ("преветствую", ("приветствую",)),
+                ("Я джва года хочу такую игру", ("я два года хочу такую игру",))
             ]
     },
     "go_bot": {
         ("go_bot/gobot_dstc2.json", "gobot_dstc2", ALL_MODES): [ONE_ARGUMENT_INFER_CHECK],
         ("go_bot/gobot_dstc2_best.json", "gobot_dstc2_best", ALL_MODES): [ONE_ARGUMENT_INFER_CHECK],
-        ("go_bot/gobot_dstc2_minimal.json", "gobot_dstc2_minimal", ('TI',)): [ONE_ARGUMENT_INFER_CHECK]
+        ("go_bot/gobot_dstc2_minimal.json", "gobot_dstc2_minimal", ('TI',)): [([{"text": "the weather is clooudy and gloooomy"}], None)],
+        ("go_bot/gobot_md_yaml_minimal.json", "gobot_md_yaml_minimal", ('TI',)): [([{"text": "start"}], None)]
     },
     "classifiers": {
         ("classifiers/paraphraser_bert.json", "classifiers", ('IP', 'TI')): [TWO_ARGUMENTS_INFER_CHECK],
@@ -107,13 +108,17 @@ PARAMS = {
         ("classifiers/yahoo_convers_vs_info.json", "classifiers", ('IP',)): [ONE_ARGUMENT_INFER_CHECK],
         ("classifiers/ru_obscenity_classifier.json", "classifiers", ('IP',)):
             [
-                ("Ну и сука же она", 'True'),
-                ("я два года жду эту игру", 'False')
+                ("Ну и сука же она", (True,)),
+                ("я два года жду эту игру", (False,))
             ],
         ("classifiers/sentiment_sst_conv_bert.json", "classifiers", ('IP',)): [ONE_ARGUMENT_INFER_CHECK],
         ("classifiers/sentiment_sst_multi_bert.json", "classifiers", ('IP',)): [ONE_ARGUMENT_INFER_CHECK],
         ("classifiers/sentiment_yelp_conv_bert.json", "classifiers", ('IP',)): [ONE_ARGUMENT_INFER_CHECK],
-        ("classifiers/sentiment_yelp_multi_bert.json", "classifiers", ('IP',)): [ONE_ARGUMENT_INFER_CHECK]
+        ("classifiers/sentiment_yelp_multi_bert.json", "classifiers", ('IP',)): [ONE_ARGUMENT_INFER_CHECK],
+        ("classifiers/sentiment_imdb_bert.json", "classifiers", ('TI',)): [ONE_ARGUMENT_INFER_CHECK],
+        ("classifiers/sentiment_imdb_conv_bert.json", "classifiers", ('TI',)): [ONE_ARGUMENT_INFER_CHECK],
+        ("classifiers/sst_torch_swcnn.json", "classifiers", ('IP', 'TI')): [ONE_ARGUMENT_INFER_CHECK],
+        ("classifiers/insults_kaggle_bert_torch.json", "classifiers", ('IP', 'TI')): [ONE_ARGUMENT_INFER_CHECK]
     },
     "snips": {
         ("classifiers/intents_snips.json", "classifiers", ('TI',)): [ONE_ARGUMENT_INFER_CHECK],
@@ -135,7 +140,32 @@ PARAMS = {
         ("classifiers/intents_sample_csv.json", "classifiers", ('TI',)): [ONE_ARGUMENT_INFER_CHECK],
         ("classifiers/intents_sample_json.json", "classifiers", ('TI',)): [ONE_ARGUMENT_INFER_CHECK]
     },
+    "entity_linking": {
+        ("kbqa/entity_linking_rus.json", "entity_linking",  ('IP',)):
+            [
+                ("Москва — столица России, центр Центрального федерального округа и центр Московской области.",
+                 (['москва', 'россии', 'центрального федерального округа', 'московской области'],
+                  [[0], [3], [6, 7, 8], [11, 12]], ['Q649', 'Q159', 'Q190778', 'Q1749'])),
+                ("абв", ([], [], []))
+            ],
+        ("kbqa/entity_linking_eng.json", "entity_linking",  ('IP',)):
+            [
+                ("The city stands on the River Thames in the south-east of England, " + \
+                 "at the head of its 50-mile (80 km) estuary leading to the North Sea.",
+                 (['the river thames', 'the north sea', 'england'], [[4, 5, 6], [30, 31, 32], [13]],
+                  ['Q19686', 'Q1693', 'Q21'])),
+                ("abc", ([], [], []))
+            ]
+    },
     "ner": {
+        ("ner/ner_ontonotes_m1.json", "ner_ontonotes_m1", ('IP', 'TI')): [
+            (["Peter", "Blackburn"], None)],
+        ("ner/ner_collection3_m1.json", "ner_collection3_m1", ('IP', 'TI')): [
+            (["Валентин", "Москва"], None)],
+        ("ner/conll2003_m1.json", "conll2003_m1", ('IP', 'TI')): [
+            (["Peter", "Blackburn"], ["NNP", "NNP"], None)],
+        ("ner/vlsp2016_full.json", "vlsp2016_full", ('IP', 'TI')): [
+            (["Hương", "tự_tin"], ["NNP", "V"], ["B-NP", "B-VP"], None)],
         ("ner/ner_conll2003_bert.json", "ner_conll2003_bert", ('IP', 'TI')): [ONE_ARGUMENT_INFER_CHECK],
         ("ner/ner_ontonotes_bert.json", "ner_ontonotes_bert", ('IP', 'TI')): [ONE_ARGUMENT_INFER_CHECK],
         ("ner/ner_ontonotes_bert_mult.json", "ner_ontonotes_bert_mult", ('IP', 'TI')): [ONE_ARGUMENT_INFER_CHECK],
@@ -148,13 +178,51 @@ PARAMS = {
         ("ner/ner_rus.json", "ner_rus", ('IP',)): [ONE_ARGUMENT_INFER_CHECK],
         ("ner/slotfill_dstc2.json", "slotfill_dstc2", ('IP',)):
             [
-                ("chinese food", "{'food': 'chinese'}"),
-                ("in the west part", "{'area': 'west'}"),
-                ("moderate price range", "{'pricerange': 'moderate'}")
-            ]
+                ("chinese food", ({'food': 'chinese'},)),
+                ("in the west part", ({'area': 'west'},)),
+                ("moderate price range", ({'pricerange': 'moderate'},))
+            ],
+        ("ner/ner_conll2003_torch_bert.json", "ner_conll2003_torch_bert", ('IP', 'TI')): [ONE_ARGUMENT_INFER_CHECK]
+    },
+    "sentence_segmentation": {
+        ("sentence_segmentation/sentseg_dailydialog.json", "sentseg_dailydialog", ('IP', 'TI')): [
+            (["hey", "alexa", "how", "are", "you"], None)]
     },
     "kbqa": {
-        ("kbqa/kbqa_rus.json", "kbqa", ('IP',)): [ONE_ARGUMENT_INFER_CHECK]
+        ("kbqa/kbqa_cq.json", "kbqa", ('IP',)):
+            [
+                ("What is the currency of Sweden?", ("Swedish krona",)),
+                ("Where was Napoleon Bonaparte born?", ("Ajaccio",)),
+                ("When did the Korean War end?", ("1953-07-27",)),
+                ("   ", ("Not Found",))
+            ],
+        ("kbqa/kbqa_cq_mt_bert.json", "kbqa", ('IP',)):
+            [
+                ("What is the currency of Sweden?", ("Swedish krona",)),
+                ("Where was Napoleon Bonaparte born?", ("Ajaccio",)),
+                ("When did the Korean War end?", ("1953-07-27",)),
+                ("   ", ("Not Found",))
+            ],
+        ("kbqa/kbqa_cq_online_mt_bert.json", "kbqa", ('IP',)):
+            [
+                ("What is the currency of Sweden?", ("Swedish krona",)),
+                ("Where was Napoleon Bonaparte born?", ("Ajaccio",)),
+                ("When did the Korean War end?", ("1953-07-27",)),
+                ("   ", ("Not Found",))
+            ],
+        ("kbqa/kbqa_cq_bert_ranker.json", "kbqa", ('IP',)):
+            [
+                ("What is the currency of Sweden?", ("Swedish krona",)),
+                ("Where was Napoleon Bonaparte born?", ("Ajaccio",)),
+                ("When did the Korean War end?", ("1953-07-27",)),
+                ("   ", ("Not Found",))
+            ],
+        ("kbqa/kbqa_cq_rus.json", "kbqa", ('IP',)):
+            [
+                ("Кто такой Оксимирон?", ("британский рэп-исполнитель",)),
+                ("Чем питаются коалы?", ("Эвкалипт",)),
+                ("абв", ("Not Found",))
+            ]
     },
     "elmo_embedder": {
         ("embedder/elmo_ru_news.json", "embedder_ru_news", ('IP',)): [ONE_ARGUMENT_INFER_CHECK],
@@ -196,7 +264,8 @@ PARAMS = {
         ("ranking/ranking_ubuntu_v2_mt_word2vec_dam_transformer.json", "ranking", ('IP',)):
             [(' & & & & & & & & bonhoeffer  whar drives do you want to mount what &  i have an ext3 usb drive  '
               '& look with fdisk -l & hello there & fdisk is all you need',
-              None)]
+              None)],
+        ("ranking/ranking_ubuntu_v2_torch_bert_uncased.json", "ranking", ('TI',)): [ONE_ARGUMENT_INFER_CHECK]
     },
     "doc_retrieval": {
         ("doc_retrieval/en_ranker_tfidf_wiki_test.json", "doc_retrieval", ('TI',)): [ONE_ARGUMENT_INFER_CHECK],
@@ -215,7 +284,9 @@ PARAMS = {
         ("squad/squad_ru.json", "squad_model_ru", ALL_MODES): [TWO_ARGUMENTS_INFER_CHECK],
         ("squad/multi_squad_noans.json", "multi_squad_noans", ('IP',)): [TWO_ARGUMENTS_INFER_CHECK],
         ("squad/squad_zh_bert_mult.json", "squad_zh_bert_mult", ALL_MODES): [TWO_ARGUMENTS_INFER_CHECK],
-        ("squad/squad_zh_bert_zh.json", "squad_zh_bert_zh", ALL_MODES): [TWO_ARGUMENTS_INFER_CHECK]
+        ("squad/squad_zh_bert_zh.json", "squad_zh_bert_zh", ALL_MODES): [TWO_ARGUMENTS_INFER_CHECK],
+        ("squad/squad_torch_bert.json", "squad_torch_bert", ('IP', 'TI')): [TWO_ARGUMENTS_INFER_CHECK],
+        ("squad/squad_torch_bert_infer.json", "squad_torch_bert_infer", ('IP',)): [TWO_ARGUMENTS_INFER_CHECK],
     },
     "seq2seq_go_bot": {
         ("seq2seq_go_bot/bot_kvret_train.json", "seq2seq_go_bot", ('TI',)):
@@ -249,6 +320,9 @@ PARAMS = {
     "syntax_tagger": {
         ("syntax/syntax_ru_syntagrus_bert.json", "syntax_ru_bert", ('IP', 'TI')): [ONE_ARGUMENT_INFER_CHECK],
         ("syntax/ru_syntagrus_joint_parsing.json", "syntax_ru_bert", ('IP',)): [ONE_ARGUMENT_INFER_CHECK]
+    },
+    "nemo": {
+        ("nemo/tts2asr_test.json", "nemo", ('IP',)): [ONE_ARGUMENT_INFER_CHECK]
     }
 }
 
@@ -353,6 +427,17 @@ def _serialize(config):
     return chainer.serialize()
 
 
+def _infer(config, inputs, download=False):
+    chainer = build_model(config, download=download)
+    if inputs:
+        prediction = chainer(*inputs)
+        if len(chainer.out_params) == 1:
+            prediction = [prediction]
+    else:
+        prediction = []
+    return prediction
+
+
 def _deserialize(config, raw_bytes, examples):
     chainer = build_model(config, serialized=raw_bytes)
     for *query, expected_response in examples:
@@ -368,33 +453,22 @@ def _deserialize(config, raw_bytes, examples):
 @pytest.mark.parametrize("model,conf_file,model_dir,mode", TEST_GRID, scope='class')
 class TestQuickStart(object):
     @staticmethod
-    def interact(config_path, model_directory, qr_list=None):
-        qr_list = qr_list or []
-        logfile = io.BytesIO(b'')
-        p = pexpect.popen_spawn.PopenSpawn(' '.join([sys.executable, "-m", "deeppavlov", "interact", str(config_path)]),
-                                           timeout=None, logfile=logfile)
-        try:
-            for *query, expected_response in qr_list:  # works until the first failed query
-                for q in query:
-                    p.expect("::")
-                    p.sendline(q)
+    def infer(config_path, qr_list=None, check_outputs=True):
 
-                p.expect(">> ")
-                if expected_response is not None:
-                    actual_response = p.readline().decode().strip()
-                    assert expected_response == actual_response, \
-                        f"Error in interacting with {model_directory} ({config_path}): {query}"
+        *inputs, expected_outputs = zip(*qr_list) if qr_list else ([],)
+        with ProcessPoolExecutor(max_workers=1) as executor:
+            f = executor.submit(_infer, config_path, inputs)
+        outputs = list(zip(*f.result()))
 
-            p.expect("::")
-            p.sendline("quit")
-            p.readlines()
-            if p.wait() != 0:
-                raise RuntimeError('Error in quitting from deep.py: \n{}'.format(logfile.getvalue().decode()))
-        except pexpect.exceptions.EOF:
-            raise RuntimeError('Got unexpected EOF: \n{}'.format(logfile.getvalue().decode()))
+        if check_outputs:
+            errors = ';'.join([f'expected `{expected}` got `{output}`'
+                               for output, expected in zip(outputs, expected_outputs)
+                               if expected is not None and expected != output])
+            if errors:
+                raise RuntimeError(f'Unexpected results for {config_path}: {errors}')
 
     @staticmethod
-    def interact_api(config_path):
+    def infer_api(config_path):
         server_params = get_server_params(config_path)
 
         url_base = 'http://{}:{}'.format(server_params['host'], api_port or server_params['port'])
@@ -436,7 +510,7 @@ class TestQuickStart(object):
             #     raise RuntimeError('Error in shutting down API server: \n{}'.format(logfile.getvalue().decode()))
 
     @staticmethod
-    def interact_socket(config_path, socket_type):
+    def infer_socket(config_path, socket_type):
         socket_params = get_server_params(config_path)
         model_args_names = socket_params['model_args_names']
 
@@ -496,25 +570,25 @@ class TestQuickStart(object):
             p.kill(signal.SIGTERM)
             p.wait()
 
-    def test_interacting_pretrained_model(self, model, conf_file, model_dir, mode):
+    def test_inferring_pretrained_model(self, model, conf_file, model_dir, mode):
         if 'IP' in mode:
             config_file_path = str(test_configs_path.joinpath(conf_file))
             install_config(config_file_path)
             deep_download(config_file_path)
 
-            self.interact(test_configs_path / conf_file, model_dir, PARAMS[model][(conf_file, model_dir, mode)])
+            self.infer(test_configs_path / conf_file, PARAMS[model][(conf_file, model_dir, mode)])
         else:
             pytest.skip("Unsupported mode: {}".format(mode))
 
-    def test_interacting_pretrained_model_api(self, model, conf_file, model_dir, mode):
+    def test_inferring_pretrained_model_api(self, model, conf_file, model_dir, mode):
         if 'IP' in mode:
-            self.interact_api(test_configs_path / conf_file)
+            self.infer_api(test_configs_path / conf_file)
         else:
             pytest.skip("Unsupported mode: {}".format(mode))
 
-    def test_interacting_pretrained_model_socket(self, model, conf_file, model_dir, mode):
+    def test_inferring_pretrained_model_socket(self, model, conf_file, model_dir, mode):
         if 'IP' in mode:
-            self.interact_socket(test_configs_path / conf_file, 'TCP')
+            self.infer_socket(test_configs_path / conf_file, 'TCP')
 
             if 'TI' not in mode:
                 shutil.rmtree(str(download_path), ignore_errors=True)
@@ -544,7 +618,7 @@ class TestQuickStart(object):
         if exc is not None:
             raise exc
 
-    def test_consecutive_training_and_interacting(self, model, conf_file, model_dir, mode):
+    def test_consecutive_training_and_inferring(self, model, conf_file, model_dir, mode):
         if 'TI' in mode:
             c = test_configs_path / conf_file
             model_path = download_path / model_dir
@@ -562,7 +636,7 @@ class TestQuickStart(object):
             if p.wait() != 0:
                 raise RuntimeError('Training process of {} returned non-zero exit code: \n{}'
                                    .format(model_dir, logfile.getvalue().decode()))
-            self.interact(c, model_dir)
+            self.infer(c, PARAMS[model][(conf_file, model_dir, mode)], check_outputs=False)
 
             shutil.rmtree(str(download_path), ignore_errors=True)
         else:

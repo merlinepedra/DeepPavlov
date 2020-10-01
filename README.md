@@ -1,9 +1,10 @@
 [![License Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/deepmipt/DeepPavlov/blob/master/LICENSE)
 ![Python 3.6, 3.7](https://img.shields.io/badge/python-3.6%20%7C%203.7-green.svg)
 [![Downloads](https://pepy.tech/badge/deeppavlov)](https://pepy.tech/project/deeppavlov)
-<img align="right" height="27%" width="27%" src="docs/_static/ipavlov_logo.png"/>
+<img align="right" height="27%" width="27%" src="docs/_static/deeppavlov_logo.png"/>
 
-DeepPavlov is an open-source conversational AI library built on [TensorFlow](https://www.tensorflow.org/) and [Keras](https://keras.io/).
+DeepPavlov is an open-source conversational AI library built on [TensorFlow](https://www.tensorflow.org/), [Keras](https://keras.io/)
+and [PyTorch](https://pytorch.org/).
 
 DeepPavlov is designed for
 * development of production ready chat-bots and complex conversational systems,
@@ -30,11 +31,17 @@ Please leave us [your feedback](https://forms.gle/i64fowQmiVhMMC7f9) on how we c
 
 [Intent/Sentence Classification](http://docs.deeppavlov.ai/en/master/features/models/classifiers.html) |  [Question Answering over Text (SQuAD)](http://docs.deeppavlov.ai/en/master/features/models/squad.html) 
 
+[Knowledge Base Question Answering](http://docs.deeppavlov.ai/en/master/features/models/kbqa.html)
+
 [Sentence Similarity/Ranking](http://docs.deeppavlov.ai/en/master/features/models/neural_ranking.html) | [TF-IDF Ranking](http://docs.deeppavlov.ai/en/master/features/models/tfidf_ranking.html) 
 
-[Morphological tagging](http://docs.deeppavlov.ai/en/master/features/models/morphotagger.html) | [Automatic Spelling Correction](http://docs.deeppavlov.ai/en/master/features/models/spelling_correction.html)
+[Morphological tagging](http://docs.deeppavlov.ai/en/master/features/models/morphotagger.html) | [Syntactic parsing](http://docs.deeppavlov.ai/en/master/features/models/syntaxparser.html)
 
-[ELMo training and fine-tuning](http://docs.deeppavlov.ai/en/master/apiref/models/elmo.html)
+[Automatic Spelling Correction](http://docs.deeppavlov.ai/en/master/features/models/spelling_correction.html) | [ELMo training and fine-tuning](http://docs.deeppavlov.ai/en/master/apiref/models/elmo.html)
+
+[Speech recognition and synthesis (ASR and TTS)](http://docs.deeppavlov.ai/en/master/features/models/nemo.html) based on [NVIDIA NeMo](https://nvidia.github.io/NeMo/index.html)
+
+[Entity Linking](http://docs.deeppavlov.ai/en/master/features/models/entity_linking.html) | [Multitask BERT](http://docs.deeppavlov.ai/en/master/features/models/multitask_bert.html)
 
 **Skills**
 
@@ -109,11 +116,11 @@ evaluate and infer it:
 
 To run supported DeepPavlov models on GPU you should have [CUDA](https://developer.nvidia.com/cuda-toolkit) 10.0
 installed on your host machine and TensorFlow with GPU support (`tensorflow-gpu`)
-installed in your python environment. Current supported TensorFlow version is 1.14.0.
+installed in your python environment. Current supported TensorFlow version is 1.15.2.
 Run
 
 ```
-pip install tensorflow-gpu==1.14.0
+pip install tensorflow-gpu==1.15.2
 ```
 
 before installing model's package requirements to install supported `tensorflow-gpu` version.
@@ -299,7 +306,7 @@ DeepPavlov is Apache 2.0 - licensed.
 ## The Team
 
 DeepPavlov is built and maintained by [Neural Networks and Deep Learning Lab](https://www.facebook.com/deepmipt/)
-at [MIPT](https://mipt.ru/english/) within [iPavlov](http://ipavlov.ai/) project.
+at [MIPT](https://mipt.ru/english/).
 
 <p align="center">
 <img src="docs/_static/ipavlov_footer.png" width="50%" height="50%"/>

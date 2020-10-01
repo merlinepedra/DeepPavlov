@@ -17,6 +17,7 @@ from typing import List, Optional
 
 import numpy as np
 from pymorphy2 import MorphAnalyzer
+from pymorphy2.analyzer import Parse
 from russian_tagsets import converters
 
 from deeppavlov.core.common.registry import register
@@ -78,10 +79,18 @@ class UDPymorphyLemmatizer(BasicLemmatizer):
     the parse whose tag resembles the most a known UD tag is chosen.
     """
 
+    RARE_FEATURES = ["Fixd", "Litr"]
+    SPECIAL_FEATURES = ["Patr", "Surn"]
+
     def __init__(self, save_path: Optional[str] = None, load_path: Optional[str] = None,
-                 transform_lemmas=False, check_proper_nouns=False, **kwargs) -> None:
+                 transform_lemmas=False, check_proper_nouns=False,
+                 rare_grammeme_penalty: float = 1.0, long_lemma_penalty: float = 1.0, 
+                 **kwargs) -> None:
         self.transform_lemmas = transform_lemmas
         self.check_proper_nouns = check_proper_nouns
+                 
+        self.rare_grammeme_penalty = rare_grammeme_penalty
+        self.long_lemma_penalty = long_lemma_penalty
         self._reset()
         self.analyzer = MorphAnalyzer()
         self.converter = converters.converter("opencorpora-int", "ud20")
@@ -131,17 +140,36 @@ class UDPymorphyLemmatizer(BasicLemmatizer):
     def _reset(self):
         self.memo = dict()
 
+    def _extract_lemma(self, parse: Parse) -> str:
+        special_feats = [x for x in self.SPECIAL_FEATURES if x in parse.tag]
+        if len(special_feats) == 0:
+            return parse.normal_form
+        # here we process surnames and patronyms since PyMorphy lemmatizes them incorrectly
+        for other in parse.lexeme:
+            tag = other.tag
+            if any(x not in tag for x in special_feats):
+                continue
+            if tag.case == "nomn" and tag.gender == parse.tag.gender and tag.number == "sing":
+                return other.word
+        return parse.normal_form        
+
     def _lemmatize(self, word: str, tag: Optional[str] = None) -> str:
         lemma = self.memo.get((word, tag))
         if lemma is not None:
             return lemma
         parses = self.analyzer.parse(word)
-        best_lemma, best_distance = word, np.inf
+        best_lemma, best_distance, best_parse = word, np.inf, None
         for i, parse in enumerate(parses):
-            curr_tag, curr_lemma = self.converter(str(parse.tag)), parse.normal_form
+            curr_tag = self.converter(str(parse.tag))
             distance = get_tag_distance(tag, curr_tag)
+            for feat in self.RARE_FEATURES:
+                if feat in parse.tag:
+                    distance += self.rare_grammeme_penalty
+                    break
+            if len(word) == 1 and len(parse.normal_form) > 1:
+                distance += self.long_lemma_penalty
             if distance < best_distance:
-                best_lemma, best_parse, best_distance = curr_lemma, parse, distance
+                best_lemma, best_parse, best_distance = self._extract_lemma(parse), parse, distance
                 if distance == 0:
                     break
         # if word.isupper() and len(word) > 1:

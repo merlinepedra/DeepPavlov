@@ -5,7 +5,7 @@ First, follow instructions on :doc:`Installation page </intro/installation>`
 to install ``deeppavlov`` package for Python 3.6/3.7.
 
 DeepPavlov contains a bunch of great pre-trained NLP models. Each model is
-determined by it's config file. List of models is available on
+determined by its config file. List of models is available on
 :doc:`the doc page </features/overview>` or in
 the ``deeppavlov.configs``:
 
@@ -13,7 +13,7 @@ the ``deeppavlov.configs``:
         
         from deeppavlov import configs
 
-When you're decided on the model (+ config file), there are two ways to train,
+When you've decided on the model (+ config file), there are two ways to train,
 evaluate and infer it:
 
 * via `Command line interface (CLI)`_ and
@@ -52,7 +52,7 @@ You can train it in the same simple way:
     Dataset will be downloaded regardless of whether there was ``-d`` flag or
     not.
 
-    To train on your own data you need to modify dataset reader path in the
+    To train on your own data, you need to modify dataset reader path in the
     `train section doc <configuration.html#Train-config>`__. The data format is
     specified in the corresponding model doc page. 
 
@@ -116,7 +116,7 @@ You can train it in the same simple way:
     Dataset will be downloaded regardless of whether there was ``-d`` flag or
     not.
 
-    To train on your own data you need to modify dataset reader path in the
+    To train on your own data, you need to modify dataset reader path in the
     `train section doc <configuration.html#Train-config>`__. The data format is
     specified in the corresponding model doc page. 
 
@@ -136,15 +136,35 @@ Integrations section for more info.
 Using GPU
 ~~~~~~~~~
 
-To run or train DeepPavlov models on GPU you should have `CUDA <https://developer.nvidia.com/cuda-toolkit>`__ 10.0
+To run or train **TensorFlow**-based DeepPavlov models on GPU you should have `CUDA <https://developer.nvidia.com/cuda-toolkit>`__ 10.0
 installed on your host machine and TensorFlow with GPU support (``tensorflow-gpu``)
-installed in your python environment. Current supported TensorFlow version is 1.14.0. Run
+installed in your python environment. Current supported TensorFlow version is 1.15.2. Run
 
     .. code:: bash
 
-        pip install tensorflow-gpu==1.14.0
+        pip install tensorflow-gpu==1.15.2
 
 before installing model's package requirements to install supported ``tensorflow-gpu`` version.
+
+To run or train **PyTorch**-based DeepPavlov models on GPU you should also have `CUDA <https://developer.nvidia.com/cuda-toolkit>`__ 9.0 or 10.0
+installed on your host machine, and install model's package requirements.
+If you want to run the code on GPU, just make the device visible for the script.
+If you want to use a particular device, you may set it in command line:
+
+    .. code:: bash
+
+        export CUDA_VISIBLE_DEVICES=3; python -m deeppavlov train <config_path>
+
+or in Python script:
+
+    .. code:: python
+
+        import os
+
+        os.environ["CUDA_VISIBLE_DEVICES"]="3"
+
+In case one wants to left the GPU device visible but use CPU, one can set directly in the configuration file in dictionary
+with model parameters `"device": "cpu"`.
 
 
 Pretrained models
@@ -153,7 +173,7 @@ Pretrained models
 DeepPavlov provides a wide range of pretrained models and skills.
 See :doc:`features overview </features/overview>` for more info. Please
 note that most of our models are trained on specific datasets for
-specific tasks and may require further training on you data.
+specific tasks and may require further training on your data.
 You can find a list of our out-of-the-box models `below <#out-of-the-box-pretrained-models>`_.
 
 

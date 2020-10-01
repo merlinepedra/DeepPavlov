@@ -47,7 +47,8 @@ Pretrained BERT can be used for Question Answering on SQuAD dataset just by appl
 BERT outputs for each subtoken. First/second linear transformation is used for prediction of probability that current
 subtoken is start/end position of an answer.
 
-BERT for SQuAD model documentation :class:`~deeppavlov.models.bert.bert_squad.BertSQuADModel`
+BERT for SQuAD model documentation on TensorFlow :class:`~deeppavlov.models.bert.bert_squad.BertSQuADModel`
+and on PyTorch :class:`~deeppavlov.models.torch_bert.torch_bert_squad.TorchBertSQuADModel`.
 
 R-Net
 ~~~~~
@@ -68,14 +69,22 @@ Default configs could be found in :config:`deeppavlov/configs/squad/ <squad/>` f
 Prerequisites
 -------------
 
-Before using the model make sure that all required packages are installed running the command:
+Before using the model make sure that all required packages are installed running the command for TensorFlow:
 
 .. code:: bash
 
     python -m deeppavlov install squad_bert
 
+and for PyTorch
+
+.. code:: bash
+
+    python -m deeppavlov install squad_torch_bert
+
+
 By running this command we will install requirements for
-:config:`deeppavlov/configs/squad/squad_bert.json <squad/squad_bert.json>`
+:config:`deeppavlov/configs/squad/squad_bert.json <squad/squad_bert.json>` or for
+:config:`deeppavlov/configs/squad/squad_torch_bert.json <squad/squad_torch_bert.json>`
 
 Model usage from Python
 -----------------------
@@ -139,6 +148,8 @@ Leadearboad <https://rajpurkar.github.io/SQuAD-explorer/>`__.
 | Model (single model)                                    |    EM (dev)    |    F-1 (dev)    |
 +=========================================================+================+=================+
 | :config:`DeepPavlov BERT <squad/squad_bert.json>`       |     80.88      |     88.49       |
++---------------------------------------------------------+----------------+-----------------+
+| :config:`BERT on PyTorch <squad/squad_torch_bert.json>` |     80.79      |     88.30       |
 +---------------------------------------------------------+----------------+-----------------+
 | :config:`DeepPavlov R-Net <squad/squad.json>`           |     71.49      |     80.34       |
 +---------------------------------------------------------+----------------+-----------------+
@@ -236,7 +247,7 @@ Link to DRCD paper: https://arxiv.org/abs/1806.00920
 +------------------------------------------------------------------------+----------------+-----------------+
 | Model config                                                           |    EM (dev)    |    F-1 (dev)    |
 +========================================================================+================+=================+
-| :config:`DeepPavlov ChineseBERT <squad/squad_zh_bert_zh.json>`         |   85.13+-0.26  |    85.15+-0.12  |
+| :config:`DeepPavlov ChineseBERT <squad/squad_zh_bert_zh.json>`         |   84.19        |    89.23        |
 +------------------------------------------------------------------------+----------------+-----------------+
-| :config:`DeepPavlov multilingual BERT <squad/squad_zh_bert_mult.json>` |   84.18+-0.34  |    84.08+-0.07  |
+| :config:`DeepPavlov multilingual BERT <squad/squad_zh_bert_mult.json>` |   84.86        |    89.03        |
 +------------------------------------------------------------------------+----------------+-----------------+

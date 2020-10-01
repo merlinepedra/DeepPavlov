@@ -15,11 +15,13 @@ class BasicNerReader(DatasetReader):
     def __init__(self, provide_pos: bool = False,
                  provide_doc_ids: bool = False,
                  iob: bool = False,
+                 iobes: bool = False,
                  docstart_token: str = None,
                  *args, **kwargs):
         self.provide_pos = provide_pos
         self.provide_doc_ids = provide_doc_ids
         self.iob = iob
+        self.iobes = iobes
         # self.sep = sep
         # self.max_length = max_length or sys.maxsize
         self.docstart_token = docstart_token
@@ -109,8 +111,35 @@ class BasicNerReader(DatasetReader):
 
             if self.iob:
                 return [(x, self._iob2_to_iob(tags)) for x, tags in samples]
-
+            if self.iobes:
+                return [(x, self._iob2_to_iobes(tags)) for x, tags in samples]
+                
         return samples
+    
+    @staticmethod
+    def _iob2_to_iob(tags):
+        iob_tags = []
+
+        for n, tag in enumerate(tags):
+            if tag.startswith('B-') and (not n or (tags[n - 1][2:] != tag[2:])):
+                tag = tag.replace("B-", "I-")
+            iob_tags.append(tag)
+
+        return iob_tags
+
+    @staticmethod
+    def _iob2_to_iobes(tags):
+        tag_map = {"BB": "S", "BO": "S", "IB": "E", "IO": "E"}
+        tags = tags + ["O"]
+        iobes_tags = []
+        for i in range(len(tags) - 1):
+            tagtag = tags[i][0] + tags[i + 1][0]
+            if tagtag in tag_map:
+                iobes_tags.append(tag_map[tagtag] + tags[i][1:])
+            else:
+                iobes_tags.append(tags[i])
+        return iobes_tags
+
 
 @register('conll2003_reader')
 class Conll2003DatasetReader(BasicNerReader):
@@ -120,12 +149,18 @@ class Conll2003DatasetReader(BasicNerReader):
              data_path: str,
              dataset_name: str = None,
              provide_pos: bool = False,
+             provide_chunk: bool = False,
              provide_doc_ids: bool = False,
              iob: bool = False,
-             docstart_token: str = None):
+             iobes: bool = False,
+             docstart_token: str = None,
+             max_length: int = None,
+             sep: str = None):
         self.provide_pos = provide_pos
+        self.provide_chunk = provide_chunk
         self.provide_doc_ids = provide_doc_ids
         self.iob = iob
+        self.iobes = iobes
         self.docstart_token = docstart_token
         self.num_docs = 0
         self.x_is_tuple = self.provide_pos or self.provide_doc_ids
@@ -138,6 +173,12 @@ class Conll2003DatasetReader(BasicNerReader):
                 url = 'http://files.deeppavlov.ai/deeppavlov_data/collection3_v2.tar.gz'
             elif dataset_name == 'ontonotes':
                 url = 'http://files.deeppavlov.ai/deeppavlov_data/ontonotes_ner.tar.gz'
+            elif dataset_name == 'vlsp2016':
+                url = 'http://files.deeppavlov.ai/deeppavlov_data/vlsp2016.tar.gz'
+            elif dataset_name == 'dailydialog':
+                url = 'http://files.deeppavlov.ai/deeppavlov_data/dailydialog.tar.gz'
+            elif dataset_name == 'collection3':
+                url = 'http://files.deeppavlov.ai/deeppavlov_data/collection3_anh.tar.gz'
             else:
                 raise RuntimeError('train.txt not found in "{}"'.format(data_path))
             data_path.mkdir(exist_ok=True, parents=True)
@@ -147,16 +188,5 @@ class Conll2003DatasetReader(BasicNerReader):
 
         for file_name in files:
             name = file_name.with_suffix('').name
-            dataset[name] = self.parse_ner_file(file_name)
+            dataset[name] = self.parse_ner_file(file_name, max_length=max_length, sep=sep)
         return dataset
-
-    @staticmethod
-    def _iob2_to_iob(tags):
-        iob_tags = []
-
-        for n, tag in enumerate(tags):
-            if tag.startswith('B-') and (not n or (tags[n - 1][2:] != tag[2:])):
-                tag = tag.replace("B-", "I-")
-            iob_tags.append(tag)
-
-        return iob_tags
