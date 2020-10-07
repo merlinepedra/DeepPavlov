@@ -100,12 +100,6 @@
     "requirements": [
       "{DEEPPAVLOV_PATH}/requirements/pytorch.txt",
       "{DEEPPAVLOV_PATH}/requirements/transformers.txt"
-    ],
-    "download": [
-      {
-        "url": "http://files.deeppavlov.ai/datasets/insults_data.tar.gz",
-        "subdir": "{DOWNLOADS_PATH}"
-      }
     ]
   }
 }
