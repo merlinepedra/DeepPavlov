@@ -123,7 +123,10 @@ class TorchBertClassifierModel(TorchModel):
 
         b_input_ids = torch.cat(input_ids, dim=0).to(self.device)
         b_input_masks = torch.cat(input_masks, dim=0).to(self.device)
-        b_labels = torch.from_numpy(np.array(y, dtype=np.float32)).to(self.device)
+        if self.n_classes > 1:
+            b_labels = torch.from_numpy(np.array(y)).to(self.device)
+        else:
+            b_labels = torch.from_numpy(np.array(y, dtype=np.float32)).to(self.device)
 
         self.optimizer.zero_grad()
 
