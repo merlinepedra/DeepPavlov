@@ -92,9 +92,9 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
     if mean_max_pool:
         config['metadata']['variables']['MODEL_PATH'] += f'_pool_meanmax'
     if att_mask_mode:
-        config['metadata']['variables']['MODEL_PATH'] += f'_pool_meanmax'
-    if tag:
         config['metadata']['variables']['MODEL_PATH'] += f'_{att_mask_mode}'
+    if tag:
+        config['metadata']['variables']['MODEL_PATH'] += f'_{tag}'
 
     model_path = config['metadata']['variables']['MODEL_PATH']
     while '{' in model_path and '}' in model_path:
