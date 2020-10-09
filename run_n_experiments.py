@@ -32,6 +32,7 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
          warmup_steps: int = typer.Option(0, '--warmup_steps', help='set warm-up steps'),
          mean_max_pool: bool = typer.Option(False, '--mean_max_pool', help='use mean & max_pool as pooler in BERT'),
          tag: str = typer.Option('', '--tag', '-t', help='add custom text to the end of model path'),
+         att_mask_mode: str = typer.Option(None, '--att_mask_mode', help='custom attention mask modes'),
          ) -> None:
     print(f'Running {n_runs} experiments for {config}')
     config = json.load(open(config, 'r'))
@@ -71,6 +72,9 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
         config, _ = change_component(config, 'torch_bert_classifier', 'warmup_steps', warmup_steps)
         config['train']['warmup_steps'] = warmup_steps
 
+    if att_mask_mode:
+        config, _ = change_component(config, 'torch_mem_tokens_preprocessor', 'att_mask_mode', att_mask_mode)
+
     if mean_max_pool:
         config, _ = change_component(config, 'torch_bert_classifier', 'mean_max_pool', mean_max_pool)
 
@@ -87,8 +91,10 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
         config['metadata']['variables']['MODEL_PATH'] += f'_rnd'
     if mean_max_pool:
         config['metadata']['variables']['MODEL_PATH'] += f'_pool_meanmax'
+    if att_mask_mode:
+        config['metadata']['variables']['MODEL_PATH'] += f'_pool_meanmax'
     if tag:
-        config['metadata']['variables']['MODEL_PATH'] += f'_{tag}'
+        config['metadata']['variables']['MODEL_PATH'] += f'_{att_mask_mode}'
 
     model_path = config['metadata']['variables']['MODEL_PATH']
     while '{' in model_path and '}' in model_path:
