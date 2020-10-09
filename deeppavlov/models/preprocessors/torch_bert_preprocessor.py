@@ -298,10 +298,12 @@ class TorchBertRankerPreprocessor(TorchBertPreprocessor):
 @register('torch_mem_tokens_preprocessor')
 class TorchMemTokensPreprocessor(Component):
     def __init__(self, tokenizer: PreTrainedTokenizer,
-                 mem_size: int = 10, mem_tokens_unique: bool = True, **kwargs) -> None:
+                 mem_size: int = 10, mem_tokens_unique: bool = True, att_mask_mode='default',
+                 **kwargs) -> None:
         self.tokenizer = tokenizer
         self.mem_size = mem_size
         self.mem_tokens_unique = mem_tokens_unique
+        self.attention_mask_mode = att_mask_mode
 
         vocab_size = len(self.tokenizer)
         if self.mem_tokens_unique:
@@ -318,6 +320,18 @@ class TorchMemTokensPreprocessor(Component):
             x.input_ids = torch.cat([x.input_ids[:, :1], self.mem, x.input_ids[:, 1:]], dim=1)
             x.token_type_ids = torch.cat([x.token_type_ids[:, :1], self.token_type_ids, x.token_type_ids[:, 1:]], dim=1)
             x.attention_mask = torch.cat([x.attention_mask[:, :1], self.attention_mask, x.attention_mask[:, 1:]], dim=1)
+            if self.attention_mask_mode == 'only_mem_read_from_mem':
+                # CLS if first
+                seq_len = x.attention_mask.shape[-1]
+                mem_tokens_mask = torch.nn.functional.one_hot(torch.arange(1, self.mem_size + 1),
+                                                              num_classes=seq_len).sum(0)
+                x.attention_mask = x.attention_mask.unsqueeze(1).repeat(1, seq_len, 1)
+                # CLS can not read from MEM
+                x.attention_mask[:, 0, :] *= (1 - mem_tokens_mask)
+                # all other tokens can not read from MEM
+                x.attention_mask[:, 1 + self.mem_size:, :] *= (1 - mem_tokens_mask)
+            else:
+                raise RuntimeError(f'att_mask_mode is set to unsupported value: {self.att_mask_mode}')
         return batch
 
     def __len__(self) -> int:
