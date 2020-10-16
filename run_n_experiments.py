@@ -13,7 +13,7 @@ from deeppavlov import evaluate_model, train_model
 def change_component(config, component, field, value):
     value_set = False
     for i in range(len(config['chainer']['pipe'])):
-        if config['chainer']['pipe'][i]['class_name'] == component:
+        if config['chainer']['pipe'][i].get('class_name', '') == component:
             config['chainer']['pipe'][i][field] = value
             value_set = True
             break
