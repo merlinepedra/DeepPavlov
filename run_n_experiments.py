@@ -33,6 +33,7 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
          mean_max_pool: bool = typer.Option(False, '--mean_max_pool', help='use mean & max_pool as pooler in BERT'),
          tag: str = typer.Option('', '--tag', '-t', help='add custom text to the end of model path'),
          att_mask_mode: str = typer.Option(None, '--att_mask_mode', help='custom attention mask modes'),
+         classifier_class: str = typer.Option(None, '--classifier_class', help='specify DP classifier class'),
          ) -> None:
     print(f'Running {n_runs} experiments for {config}')
     config = json.load(open(config, 'r'))
@@ -40,7 +41,7 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
     mem_size_changed = False
     if mem_size != 0:
         config, mem_size_changed = change_component(config, 'torch_mem_tokens_preprocessor', 'mem_size', mem_size)
-        if not mem_size_changed:
+        if not mem_size_changed and classifier_class != 'torch_bert_classifier_mt':
             print('config file does not support mem_size argument')
             exit(1)
         else:
@@ -77,6 +78,16 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
 
     if mean_max_pool:
         config, _ = change_component(config, 'torch_bert_classifier', 'mean_max_pool', mean_max_pool)
+
+    if classifier_class:
+        if classifier_class == 'torch_bert_classifier_mt':
+            config, _ = change_component(config, 'torch_bert_classifier', 'output_hidden_states', True)
+            if mem_size == 0:
+                print(f'mem_size should be >0 for classifer_class: {classifier_class}')
+                exit(1)
+            config, mem_size_changed = change_component(config, 'torch_bert_classifier', 'mem_size', mem_size)
+
+        config, _ = change_component(config, 'torch_bert_classifier', 'class_name', classifier_class)
 
     # get model path
     if mem_size_changed:
