@@ -439,13 +439,14 @@ class TorchBertClassifierModelMT(TorchModel):
                  clip_norm: Optional[float] = None,
                  bert_config_file: Optional[str] = None,
                  vocab_size: Optional[int] = None,
-                 output_attentions: Optional[bool] = False,
-                 output_hidden_states: Optional[bool] = False,
-                 pool_mem_tokens: Optional[bool] = False,
+                 output_attentions: bool = False,
+                 output_hidden_states: bool = False,
+                 pool_mem_tokens: bool = False,
                  mem_size: Optional[int] = 0,
-                 only_head: Optional[bool] = False,
-                 random_init: Optional[bool] = False,
-                 mean_max_pool: Optional[bool] = False,
+                 only_head: bool = False,
+                 random_init: bool = False,
+                 mean_max_pool: bool = False,
+                 init_tower_layer_with_encoder: bool = False,
                  **kwargs) -> None:
 
         self.return_probas = return_probas
@@ -469,6 +470,7 @@ class TorchBertClassifierModelMT(TorchModel):
         self.only_head = only_head
         self.random_init = random_init
         self.mean_max_pool = mean_max_pool
+        self.init_tower_layer_with_encoder = init_tower_layer_with_encoder
 
         if self.multilabel and not self.one_hot_labels:
             raise RuntimeError('Use one-hot encoded labels for multilabel classification!')
@@ -572,6 +574,12 @@ class TorchBertClassifierModelMT(TorchModel):
                                       num_labels=self.n_classes, mem_size=self.mem_size,
                                       output_hidden_states=self.output_hidden_states,
                                       output_attentions=self.output_attentions)
+
+        if self.init_tower_layer_with_encoder:
+            encoder_last_layer_p = dict(self.model.bert.encoder.layer[-1].named_parameters())
+            tower_layer_p = self.model.mem_tower.tower_layer.named_parameters()
+            for p_name, p in tower_layer_p:
+                p.data.copy_(encoder_last_layer_p[p_name].data)
 
         self.model.to(self.device)
 

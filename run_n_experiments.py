@@ -34,6 +34,8 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
          tag: str = typer.Option('', '--tag', '-t', help='add custom text to the end of model path'),
          att_mask_mode: str = typer.Option(None, '--att_mask_mode', help='custom attention mask modes'),
          classifier_class: str = typer.Option(None, '--classifier_class', help='specify DP classifier class'),
+         init_mem_tower: bool = typer.Option(False, '--init_mem_tower', help='init mem tower self-attention with last '
+                                                                             'encoder self-attention weights'),
          ) -> None:
     print(f'Running {n_runs} experiments for {config}')
     config = json.load(open(config, 'r'))
@@ -89,6 +91,13 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
 
         config, _ = change_component(config, 'torch_bert_classifier', 'class_name', classifier_class)
 
+    if init_mem_tower:
+        if not classifier_class == 'torch_bert_classifier_mt':
+            print('init_mem_tower can be used only with classifier_class set to torch_bert_classifier_mt')
+            exit(1)
+        config, _ = change_component(config, 'torch_bert_classifier_mt', 'init_tower_layer_with_encoder',
+                                     init_mem_tower)
+
     # get model path
     if mem_size_changed:
         config['metadata']['variables']['MODEL_PATH'] += f'_{mem_size}'
@@ -104,6 +113,8 @@ def main(config: str = typer.Argument(..., help='config to run experiment'),
         config['metadata']['variables']['MODEL_PATH'] += f'_pool_meanmax'
     if att_mask_mode:
         config['metadata']['variables']['MODEL_PATH'] += f'_{att_mask_mode}'
+    if init_mem_tower:
+        config['metadata']['variables']['MODEL_PATH'] += f'_init_mem_tower'
     if tag:
         config['metadata']['variables']['MODEL_PATH'] += f'_{tag}'
 
