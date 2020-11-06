@@ -21,7 +21,7 @@ from typing import List, Tuple, Optional, Dict
 import numpy as np
 import torch
 from overrides import overrides
-from transformers import BertForQuestionAnswering, BertConfig, BertTokenizer
+from transformers import AutoModelForQuestionAnswering, AutoConfig, AutoTokenizer
 from transformers.data.processors.utils import InputFeatures
 
 from deeppavlov import build_model
@@ -123,10 +123,13 @@ class TorchBertSQuADModel(TorchModel):
         b_y_end = torch.from_numpy(np.array(y_end)).to(self.device)
 
         self.optimizer.zero_grad()
-
-        outputs = self.model(input_ids=b_input_ids, attention_mask=b_input_masks,
+        try:
+            outputs = self.model(input_ids=b_input_ids, attention_mask=b_input_masks,
                              token_type_ids=b_input_type_ids,
                              start_positions=b_y_st, end_positions=b_y_end)
+        except:
+            print("ERROR")
+
         loss = outputs[0]
         loss.backward()
         # Clip the norm of the gradients to 1.0.
@@ -160,7 +163,12 @@ class TorchBertSQuADModel(TorchModel):
 
         with torch.no_grad():
             # Forward pass, calculate logit predictions
-            outputs = self.model(input_ids=b_input_ids, attention_mask=b_input_masks, token_type_ids=b_input_type_ids)
+            # token_type_id = (segment_1, segment_2) is essential for squad
+            try:
+                outputs = self.model(input_ids=b_input_ids, attention_mask=b_input_masks, token_type_ids=b_input_type_ids)
+            except:
+                print("tokep_type_id is crucial")
+
             logits_st, logits_end = outputs[:2]
 
             bs = b_input_ids.size()[0]
@@ -205,17 +213,18 @@ class TorchBertSQuADModel(TorchModel):
         if fname is not None:
             self.load_path = fname
 
-        if self.pretrained_bert and not Path(self.pretrained_bert).is_file():
-            self.model = BertForQuestionAnswering.from_pretrained(
-                self.pretrained_bert, output_attentions=False, output_hidden_states=False)
+        if self.pretrained_bert:
+            self.model = AutoModelForQuestionAnswering.from_pretrained(
+                self.pretrained_bert, config = {'output_attentions':False, 
+                                                'output_hidden_states':False})
         elif self.bert_config_file and Path(self.bert_config_file).is_file():
-            self.bert_config = BertConfig.from_json_file(str(expand_path(self.bert_config_file)))
+            self.bert_config = AutoConfig.from_json_file(str(expand_path(self.bert_config_file)))
 
             if self.attention_probs_keep_prob is not None:
                 self.bert_config.attention_probs_dropout_prob = 1.0 - self.attention_probs_keep_prob
             if self.hidden_keep_prob is not None:
                 self.bert_config.hidden_dropout_prob = 1.0 - self.hidden_keep_prob
-            self.model = BertForQuestionAnswering(config=self.bert_config)
+            self.model = AutoModelForQuestionAnswering.from_config(config=self.bert_config)
         else:
             raise ConfigError("No pre-trained BERT model is given.")
 
@@ -287,10 +296,10 @@ class TorchBertSQuADInferModel(Component):
 
         if Path(vocab_file).is_file():
             vocab_file = str(expand_path(vocab_file))
-            self.tokenizer = BertTokenizer(vocab_file=vocab_file,
+            self.tokenizer = AutoTokenizer(vocab_file=vocab_file,
                                            do_lower_case=do_lower_case)
         else:
-            self.tokenizer = BertTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
+            self.tokenizer = AutoTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
 
         self.batch_size = batch_size
 
