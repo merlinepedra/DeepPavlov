@@ -20,7 +20,7 @@
     "pipe": [
       {
         "class_name": "torch_bert_preprocessor",
-        "vocab_file": "bert-base-cased",
+        "vocab_file": "{TRANSFORMER}",
         "do_lower_case": false,
         "max_seq_length": 384,
         "return_tokens": true,
@@ -62,7 +62,7 @@
       },
       {
         "class_name": "torch_squad_bert_model",
-        "pretrained_bert": "bert-base-cased",
+        "pretrained_bert": "{TRANSFORMER}",
         "save_path": "{MODELS_PATH}/model",
         "load_path": "{MODELS_PATH}/model",
         "optimizer": "AdamW",
@@ -158,9 +158,10 @@
   },
   "metadata": {
     "variables": {
+      "TRANSFORMER": "bert-base-multilingual-cased",
       "ROOT_PATH": "~/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
-      "MODELS_PATH": "{ROOT_PATH}/models/squad_torch_bert"
+      "MODELS_PATH": "{ROOT_PATH}/models/squad_torch_bert/{TRANSFORMER}"
     },
     "requirements": [
       "{DEEPPAVLOV_PATH}/requirements/pytorch.txt",
