@@ -19,6 +19,8 @@ Concrete DatasetIterator classes.
 
 .. autoclass:: deeppavlov.dataset_iterators.file_paths_iterator.FilePathsIterator
 
+.. automodule:: deeppavlov.dataset_iterators.huggingface_dataset_iterator.HuggingFaceDatasetIterator
+
 .. autoclass:: deeppavlov.dataset_iterators.kvret_dialog_iterator.KvretDialogDatasetIterator
 
 .. autofunction:: deeppavlov.dataset_iterators.morphotagger_iterator.preprocess_data

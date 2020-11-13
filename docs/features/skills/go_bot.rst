@@ -324,8 +324,9 @@ using the system's components.
 
 RASA.ai is an another well-known Open Source Conversational AI Framework. Their approach to defining the domain model and behavior of the goal-oriented bots is quite simple for building simple goal-oriented bots. In this section you will learn how to use key parts of RASA DSLs (configuration files) to build your own goal-oriented chatbot based on the DeepPavlov's Go-Bot framework.
 
-We encourage you to read the `tutorial notebook <https://github.com/deepmipt/DeepPavlov/blob/master/examples/gobot_md_yaml_configs_tutorial.ipynb>`__ 
-to get better understanding of how to build basic and more advanced goal-oriented bots with these RASA DSLs.
+We encourage you to read the `original tutorial notebook <https://github.com/deepmipt/DeepPavlov/blob/master/examples/gobot_md_yaml_configs_tutorial.ipynb>`__
+and the `updated one <https://colab.research.google.com/drive/1BdTnDsytEABOU7RbNRQqIVE-rBHOv0kM?usp=sharing>`__ to get better
+understanding of how to build basic and more advanced goal-oriented bots with these RASA DSLs.
 
 **Note:** As mentioned in our `blog post <https://deeppavlov.ai/blog/tpost/58y1cugd7b-deeppavlov-library-0120-release>`__, **this is the
 very beginning of our work** focused on supporting RASA DSLs as a way to
