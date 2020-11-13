@@ -150,15 +150,27 @@ class Trie:
         node = self.descend(self.root, s)
         return (node != Trie.NO_NODE) and self.is_final(node)
 
-    def words(self):
+    def words(self, root=None):
         """
         Возвращает итератор по словам, содержащимся в боре
         """
-        branch, word, indexes = [self.root], [], [0]
-        letters_with_children = [self._get_children_and_letters(self.root)]
+        if root is None:
+            root, root_prefix = self.root, ""
+        elif isinstance(root, (str, list, tuple)):
+            root_prefix = root
+            root = self.descend(self.root, root)
+        else:
+            raise TypeError("Wrong type of root:", root)
+        branch, word, indexes = [root], [], [0]
+        letters_with_children = [self._get_children_and_letters(root)]
         while len(branch) > 0:
             if self.is_final(branch[-1]):
-                yield "".join(word)
+                to_yield = "".join(word)
+                if root_prefix:
+                    if not isinstance(root_prefix, str):
+                        root_prefix = "".join(root_prefix)
+                    to_yield = root_prefix + to_yield
+                yield to_yield
             while indexes[-1] == len(letters_with_children[-1]):
                 indexes.pop()
                 letters_with_children.pop()
