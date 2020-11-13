@@ -20,6 +20,7 @@ Concrete DatasetReader classes.
    :members:
 
 .. autoclass:: deeppavlov.dataset_readers.huggingface_dataset_reader.HuggingFaceDatasetReader
+   :members:
 
 .. autoclass:: deeppavlov.dataset_readers.insurance_reader.InsuranceReader
 
