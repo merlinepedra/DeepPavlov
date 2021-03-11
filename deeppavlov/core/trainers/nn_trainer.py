@@ -147,8 +147,8 @@ class NNTrainer(FitTrainer):
         self.start_time: Optional[float] = None
 
         if self.tensorboard_log_dir is not None:
-            self.tb_train_writer = self._tf.summary.FileWriter(str(self.tensorboard_log_dir / 'train_log'))
-            self.tb_valid_writer = self._tf.summary.FileWriter(str(self.tensorboard_log_dir / 'valid_log'))
+            self.tb_train_writer = self._tf.summary.create_file_writer(str(self.tensorboard_log_dir / 'train_log'))
+            self.tb_valid_writer = self._tf.summary.create_file_writer(str(self.tensorboard_log_dir / 'valid_log'))
 
     def save(self) -> None:
         if self._loaded:
@@ -175,13 +175,13 @@ class NNTrainer(FitTrainer):
         metrics = list(report['metrics'].items())
 
         if tensorboard_tag is not None and self.tensorboard_log_dir is not None:
-            summary = self._tf.Summary()
-            for name, score in metrics:
-                summary.value.add(tag=f'{tensorboard_tag}/{name}', simple_value=score)
             if tensorboard_index is None:
                 tensorboard_index = self.train_batches_seen
-            self.tb_valid_writer.add_summary(summary, tensorboard_index)
-            self.tb_valid_writer.flush()
+
+            with self.tb_valid_writer.as_default() as writer:
+                for name, score in metrics:
+                    self._tf.summary.scalar(name=f'{tensorboard_tag}/{name}', data=score, step=tensorboard_index)
+                writer.flush()
 
         m_name, score = metrics[0]
 
@@ -247,12 +247,10 @@ class NNTrainer(FitTrainer):
             metrics.append(('loss', report['loss']))
 
         if metrics and self.tensorboard_log_dir is not None:
-            summary = self._tf.Summary()
-
-            for name, score in metrics:
-                summary.value.add(tag=f'{tensorboard_tag}/{name}', simple_value=score)
-            self.tb_train_writer.add_summary(summary, tensorboard_index)
-            self.tb_train_writer.flush()
+            with self.tb_train_writer.as_default() as writer:
+                for name, score in metrics:
+                    self._tf.summary.scalar(name=f'{tensorboard_tag}/{name}', data=score, step=tensorboard_index)
+                writer.flush()
 
         self._send_event(event_name='after_train_log', data=report)
 
