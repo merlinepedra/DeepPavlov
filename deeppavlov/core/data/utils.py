@@ -23,7 +23,7 @@ from hashlib import md5
 from itertools import chain
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Generator, Iterable, List, Mapping, Optional, Sequence, Sized, Union, Collection, Literal
+from typing import Any, Generator, Iterable, List, Mapping, Optional, Sequence, Sized, Union, Collection
 from urllib.parse import urlencode, parse_qs, urlsplit, urlunsplit, urlparse
 
 import numpy as np
@@ -224,11 +224,10 @@ def ungzip(file_path: Union[Path, str], extract_path: Optional[Union[Path, str]]
 zip_ext = 'zip'
 tar_gz_ext = 'tar.gz'
 gz_ext = 'gz'
-ArchiveT = Literal['zip', 'tar.gz', 'gz']
 def download_decompress(url: str,
                         download_path: Union[Path, str],
                         extract_paths: Optional[Union[List[Union[Path, str]], Path, str]] = None,
-                        archive_type: Optional[ArchiveT] = None) -> None:
+                        archive_type: Optional = None) -> None:
     """Download and extract .zip or .tar.gz or .gz file to one or several target locations.
 
     The archive is deleted if extraction was successful.
