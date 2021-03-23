@@ -23,7 +23,7 @@ from hashlib import md5
 from itertools import chain
 from logging import getLogger
 from pathlib import Path
-from typing import Any, Generator, Iterable, List, Mapping, Optional, Sequence, Sized, Union, Collection
+from typing import Any, Generator, Iterable, List, Mapping, Optional, Sequence, Sized, Union, Collection, Literal
 from urllib.parse import urlencode, parse_qs, urlsplit, urlunsplit, urlparse
 
 import numpy as np
