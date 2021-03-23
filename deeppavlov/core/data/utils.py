@@ -221,10 +221,15 @@ def ungzip(file_path: Union[Path, str], extract_path: Optional[Union[Path, str]]
             fout.write(block)
 
 
+zip_ext = 'zip'
+tar_gz_ext = 'tar.gz'
+gz_ext = 'gz'
+ArchiveT = Literal['zip', 'tar.gz', 'gz']
 def download_decompress(url: str,
                         download_path: Union[Path, str],
-                        extract_paths: Optional[Union[List[Union[Path, str]], Path, str]] = None) -> None:
-    """Download and extract .tar.gz or .gz file to one or several target locations.
+                        extract_paths: Optional[Union[List[Union[Path, str]], Path, str]] = None,
+                        archive_type: Optional[ArchiveT] = None) -> None:
+    """Download and extract .zip or .tar.gz or .gz file to one or several target locations.
 
     The archive is deleted if extraction was successful.
 
@@ -232,7 +237,7 @@ def download_decompress(url: str,
         url: URL for file downloading.
         download_path: Path to the directory where downloaded file will be stored until the end of extraction.
         extract_paths: Path or list of paths where contents of archive will be extracted.
-
+        archive_type: type of the downloaded file (useful when no extension provided in the file name itself)
     """
     file_name = Path(urlparse(url).path).name
     download_path = Path(download_path)
@@ -268,11 +273,11 @@ def download_decompress(url: str,
         log.info('Extracting {} archive into {}'.format(arch_file_path, extracted_path))
         extracted_path.mkdir(parents=True, exist_ok=True)
 
-        if file_name.endswith('.tar.gz'):
+        if archive_type == tar_gz_ext or file_name.endswith('.tar.gz'):
             untar(arch_file_path, extracted_path)
-        elif file_name.endswith('.gz'):
+        elif archive_type == gz_ext or file_name.endswith('.gz'):
             ungzip(arch_file_path, extracted_path / Path(file_name).with_suffix('').name)
-        elif file_name.endswith('.zip'):
+        elif archive_type == zip_ext or file_name.endswith('.zip'):
             with zipfile.ZipFile(arch_file_path, 'r') as zip_ref:
                 zip_ref.extractall(extracted_path)
         else:
