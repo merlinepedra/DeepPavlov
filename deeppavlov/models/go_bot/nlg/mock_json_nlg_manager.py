@@ -111,7 +111,7 @@ class MockJSONNLGManager(NLGManagerInterface):
         domain_knowledge = DomainKnowledge.from_yaml(domain_path)
         templates: Dict[str, List[str]] = domain_knowledge.response_templates
 
-        template_type = "DefaultTemplate"
+        template_type = go_bot_templates.DefaultTemplate
         templates_o = go_bot_templates.RandTemplates(template_type)
         for act, templ_li in templates.items():
             for templ in templ_li:
@@ -170,7 +170,7 @@ class MockJSONNLGManager(NLGManagerInterface):
 
         slots_values = {slot_name: tracker_slotfilled_state.get(slot_name, "unk") for slot_name in slots_to_log}
         actions_tuple = self.ids2action_tuples[policy_prediction.predicted_action_ix]
-        texts_tuple = (self._generate_slotfilled_text_for_action(a, slots_values)
+        texts_tuple = (self._generate_slotfilled_text_for_action(a, tracker_slotfilled_state)
                        for a in actions_tuple)
         response = JSONNLGResponse(slots_values, actions_tuple)
         verbose_response = VerboseJSONNLGResponse.from_json_nlg_response(response)
@@ -190,7 +190,11 @@ class MockJSONNLGManager(NLGManagerInterface):
         Returns:
             the text generated for the passed action and slot values.
         """
-        text = self.templates.templates[action].generate_text(slots)
+        if action in self.templates:
+            print(slots)
+            text = self.templates[action].generate_text(slots)
+        else:
+            text = None
         return text
 
     def num_of_known_actions(self) -> int:

@@ -205,7 +205,7 @@ class RandTemplates:
         If does not exist, return None.
         """
         if isinstance(key, str):
-            return random.choice(self.act2templ[key])
+            return random.choice(list(self.act2templ[key]))
 
     def __len__(self):
         return len(self.act2templ)
