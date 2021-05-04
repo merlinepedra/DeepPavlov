@@ -184,3 +184,53 @@ class Templates:
             for act in sorted(self.actions):
                 template = self.__getitem__(act)
                 outfile.write('{}\t{}\n'.format(act, template))
+
+import random
+class RandTemplates:
+
+    def __init__(self, ttype):
+        self.ttype = ttype
+        self.act2templ = {}
+        self._actions = []
+        self._templates = []
+
+    def __contains__(self, key):
+        """If key is an str, returns whether the key is in the actions.
+        """
+        if isinstance(key, str):
+            return key in self.act2templ
+
+    def __getitem__(self, key):
+        """If key is an str, returns corresponding template.
+        If does not exist, return None.
+        """
+        if isinstance(key, str):
+            return random.choice(self.act2templ[key])
+
+    def __len__(self):
+        return len(self.act2templ)
+
+    def __str__(self):
+        return str(self.act2templ)
+
+    def __setitem__(self, key, value):
+        key = str(key)
+        if key not in self.act2templ:
+            self.act2templ[key] = set()
+        self.act2templ[key].add(value)
+        self._actions = []
+        self._templates = []
+
+    @property
+    def actions(self):
+        if not self._actions:
+            self._actions = sorted(self.act2templ.keys())
+        return self._actions
+
+    @property
+    def templates(self):
+        if not self._templates:
+            self._templates = [t
+                               for a in self.actions
+                               for t in self.act2templ[a]]
+        return self._templates

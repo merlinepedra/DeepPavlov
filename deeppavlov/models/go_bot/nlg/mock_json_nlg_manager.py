@@ -1,19 +1,24 @@
 import json
 from itertools import combinations
 from pathlib import Path
-from typing import Union, Dict, List, Tuple
+from typing import Union, Dict, List, Tuple, NewType, Type
 
 from deeppavlov.core.commands.utils import expand_path
 from deeppavlov.core.common.errors import ConfigError
 from deeppavlov.core.common.registry import register, get_model
 from deeppavlov.dataset_readers.dstc2_reader import DSTC2DatasetReader
+from deeppavlov.dataset_readers.md_yaml_dialogs_reader import MD_YAML_DialogsDatasetReader
 from deeppavlov.models.go_bot.dto.dataset_features import BatchDialoguesFeatures
 from deeppavlov.models.go_bot.nlg.dto.json_nlg_response import JSONNLGResponse, VerboseJSONNLGResponse
 from deeppavlov.models.go_bot.nlg.nlg_manager import log
 from deeppavlov.models.go_bot.nlg.nlg_manager_interface import NLGManagerInterface
 from deeppavlov.models.go_bot.policy.dto.policy_prediction import PolicyPrediction
+import deeppavlov.models.go_bot.nlg.templates.templates as go_bot_templates
 
+import re
 
+NLGCompatibleDatasetReader = NewType("NLGCompatibleDatasetReader",
+                                     MD_YAML_DialogsDatasetReader)
 @register("gobot_json_nlg_manager")
 class MockJSONNLGManager(NLGManagerInterface):
 
@@ -33,7 +38,9 @@ class MockJSONNLGManager(NLGManagerInterface):
                       f"actions2slots_path={actions2slots_path}, "
                       f"api_call_action={api_call_action}, debug={debug}")
 
-        self._dataset_reader = get_model(dataset_reader_class)
+        # noinspection PyTypeChecker
+        self._dataset_reader: Type[NLGCompatibleDatasetReader] \
+            = get_model(dataset_reader_class)
 
         individual_actions2slots = self._load_actions2slots_mapping(actions2slots_path)
         possible_actions_combinations_tuples = sorted(
@@ -41,6 +48,7 @@ class MockJSONNLGManager(NLGManagerInterface):
                 for actions_combination_tuple
                 in self._extract_actions_combinations(data_path)),
             key=lambda x: '+'.join(x))
+        self.templates = self._load_action_templates(data_path)
 
         self.action_tuples2ids = {action_tuple: action_tuple_idx
                                   for action_tuple_idx, action_tuple
@@ -82,6 +90,36 @@ class MockJSONNLGManager(NLGManagerInterface):
                     actions_tuple = tuple(system_response["act"].split('+'))
                     actions_combinations.add(actions_tuple)
         return actions_combinations
+
+    def _load_action_templates(self, dataset_path: Union[str, Path]):
+        dataset_path = expand_path(dataset_path)
+
+        # region code duplication; replace w dataset = self._dataset_reader.read
+        domain_fname = self._dataset_reader.DOMAIN_FNAME
+        nlu_fname = self._dataset_reader.NLU_FNAME
+        stories_fnames = tuple(self._dataset_reader._data_fname(dt)
+                               for dt in self._dataset_reader.VALID_DATATYPES)
+        required_fnames = stories_fnames + (nlu_fname, domain_fname)
+        for required_fname in required_fnames:
+            required_path = Path(dataset_path, required_fname)
+            if not required_path.exists():
+                log.error(f"INSIDE MockJSONNLGManager._load_action_templates(): "
+                          f"{required_fname} not found with path {required_path}")
+        domain_path = Path(dataset_path, domain_fname)
+        from deeppavlov.dataset_readers.md_yaml_dialogs_reader import DomainKnowledge
+        # endregion
+        domain_knowledge = DomainKnowledge.from_yaml(domain_path)
+        templates: Dict[str, List[str]] = domain_knowledge.response_templates
+
+        template_type = "DefaultTemplate"
+        templates_o = go_bot_templates.RandTemplates(template_type)
+        for act, templ_li in templates.items():
+            for templ in templ_li:
+                oldstyle_templ = re.sub(self._dataset_reader._SLOTS_MARKUP_PATTERN,
+                                        r"#\g<slot_name>", templ)
+                # IMPORTANT: assignment is ok below, it actually adds to set
+                templates_o[act] = templates_o.ttype.from_str(oldstyle_templ)
+        return templates_o
 
     @staticmethod
     def _load_actions2slots_mapping(actions2slots_json_path) -> Dict[str, str]:
@@ -130,11 +168,28 @@ class MockJSONNLGManager(NLGManagerInterface):
 
         slots_values = {slot_name: tracker_slotfilled_state.get(slot_name, "unk") for slot_name in slots_to_log}
         actions_tuple = self.ids2action_tuples[policy_prediction.predicted_action_ix]
-
+        texts_tuple = (self._generate_slotfilled_text_for_action(a, slots_values)
+                       for a in actions_tuple)
         response = JSONNLGResponse(slots_values, actions_tuple)
         verbose_response = VerboseJSONNLGResponse.from_json_nlg_response(response)
         verbose_response.policy_prediction = policy_prediction
+        verbose_response.texts = texts_tuple
         return verbose_response
+
+    def _generate_slotfilled_text_for_action(self, action: str, slots: dict) -> str:
+        """
+        Generate text for the predicted speech action using the pattern provided.
+        The slotfilled state provides info to encapsulate to the pattern.
+
+        Args:
+            action: the action to generate text for.
+            slots: the slots and their known values. usually received from dialogue state tracker.
+
+        Returns:
+            the text generated for the passed action and slot values.
+        """
+        text = self.templates.templates[action].generate_text(slots)
+        return text
 
     def num_of_known_actions(self) -> int:
         """

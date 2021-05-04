@@ -83,6 +83,13 @@ class MD_YAML_DialogsDatasetReader(DatasetReader):
     NLU_FNAME = "nlu.md"
     DOMAIN_FNAME = "domain.yml"
 
+    _SLOTS_MARKUP_PATTERN = r"\[" + \
+                            r"(?P<slot_value>.*?)" + \
+                            r"\]" + \
+                            r"\(" + \
+                            r"(?P<slot_name>.*?)" + \
+                            r"\)"
+
     @classmethod
     def _data_fname(cls, datatype: str) -> str:
         assert datatype in cls.VALID_DATATYPES, f"wrong datatype name: {datatype}"
@@ -158,7 +165,8 @@ class MD_YAML_DialogsDatasetReader(DatasetReader):
                 if line.strip().startswith('-'):
                     # lines starting with - are listing the examples of intent texts of the current intent type
                     intent_text_w_markup = line.strip().strip('-').strip()
-                    line_slots_found = re.finditer(slots_markup_pattern, intent_text_w_markup)
+                    line_slots_found = re.finditer(cls._SLOTS_MARKUP_PATTERN,
+                                                   intent_text_w_markup)
                     if ignore_slots:
                         line_slots_found = []
 
