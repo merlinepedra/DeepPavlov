@@ -115,6 +115,8 @@ class MockJSONNLGManager(NLGManagerInterface):
         templates_o = go_bot_templates.RandTemplates(template_type)
         for act, templ_li in templates.items():
             for templ in templ_li:
+                if isinstance(templ, dict):
+                    templ = templ.get("text", '')
                 oldstyle_templ = re.sub(self._dataset_reader._SLOTS_MARKUP_PATTERN,
                                         r"#\g<slot_name>", templ)
                 # IMPORTANT: assignment is ok below, it actually adds to set
