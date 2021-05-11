@@ -195,8 +195,7 @@ def start_model_server(model_config: Path,
 
     @app.post(model_endpoint, summary='A model endpoint')
     async def answer(item: Batch = Body(..., example=model_endpoint_post_example)) -> List:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, interact, model, item.dict())
+        return interact(model, item.dict())
 
     @app.post('/probe', include_in_schema=False)
     async def probe(item: Batch) -> List[str]:
