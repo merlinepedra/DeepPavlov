@@ -20,11 +20,11 @@ mdt = sacremoses.MosesDetokenizer()
 
 def evaluate_on_lambada(model, tokenizer):
     dataset = load_dataset("lambada")
-    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=-100)
     losses = []
     X = []
     Y = []
     Y_pred = []
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=-100)
     for x in tqdm(dataset['test']):
         x = x['text']
         x = mdt.detokenize(mpn.normalize(x).split())
@@ -47,7 +47,45 @@ def evaluate_on_lambada(model, tokenizer):
 
 
 def evaluate_on_ptb(model, tokenizer):
-    ...
+    dataset = load_dataset("ptb_text_only")
+    n_tokens = 0
+    n_bpes = 0
+    losses = []
+    Xs = []
+    X_processed = []
+    Y_processed = []
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=-100)
+    for x in tqdm(dataset['test']):
+        x = x['sentence']
+        x = mdt.detokenize(mpn.normalize(x).split())
+        Xs += [x]
+        tokens = tokenizer.tokenize(x)
+        n_bpes += len(tokens)
+        n_tokens += len(x.split())
+        for i, token in enumerate(tokens):
+            if i == 0:
+                x_text = '<extra_id_0> <extra_id_1> <extra_id_2> .'
+            else:
+                x_text = tokenizer.convert_tokens_to_string(tokens[:i])
+                if i < len(tokens) - 1:
+                    x_text += ' <extra_id_0> <extra_id_1> .'
+                else:
+                    x_text += ' <extra_id_0> .'
+            y_text = f'<extra_id_0> {tokenizer.convert_tokens_to_string([token])} </s>'
+            X_processed += [x_text]
+            Y_processed += [y_text]
+            input_ids = tokenizer(x_text, return_tensors='pt').input_ids.to(device)
+            labels = tokenizer(y_text, return_tensors='pt').input_ids.to(device)
+            with torch.no_grad():
+                outputs = model(input_ids, labels=labels)
+                # compute loss only on target tokens, without </s> and extra_id
+                loss = loss_fn(outputs.logits[:, 1:-1].view(-1, outputs.logits[:, 1:-1].size(-1)),
+                               labels[:, 1:-1].view(-1))
+                loss = loss.item()
+                losses += [loss]
+    losses = [loss for loss in losses if not np.isnan(loss)]
+    print(f'PTB test ppl (tokens):   {np.exp(np.sum(losses) / n_tokens):.2f}')
+    print(f'PTB test ppl (bpes):   {np.exp(np.sum(losses) / n_bpes):.2f}')
 
 
 parser = argparse.ArgumentParser()
