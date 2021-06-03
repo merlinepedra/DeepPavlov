@@ -18,7 +18,9 @@ mpn = sacremoses.MosesPunctNormalizer()
 mdt = sacremoses.MosesDetokenizer()
 
 
-def evaluate_on_lambada(model, tokenizer):
+def evaluate_on_lambada(model: T5ForConditionalGeneration, tokenizer: T5Tokenizer):
+    """Computes ppl on LAMBADA dataset for t5 models trained with span corruption.
+    """
     dataset = load_dataset("lambada")
     losses = []
     X = []
@@ -47,6 +49,8 @@ def evaluate_on_lambada(model, tokenizer):
 
 
 def evaluate_on_ptb(model, tokenizer):
+    """Computes ppl on PTB dataset for t5 models trained with span corruption.
+    """
     dataset = load_dataset("ptb_text_only")
     n_tokens = 0
     n_bpes = 0
@@ -85,7 +89,7 @@ def evaluate_on_ptb(model, tokenizer):
                 losses += [loss]
     losses = [loss for loss in losses if not np.isnan(loss)]
     print(f'PTB test ppl (tokens):   {np.exp(np.sum(losses) / n_tokens):.2f}')
-    print(f'PTB test ppl (bpes):   {np.exp(np.sum(losses) / n_bpes):.2f}')
+    print(f'PTB test ppl (bpes):     {np.exp(np.sum(losses) / n_bpes):.2f}')
 
 
 parser = argparse.ArgumentParser()
