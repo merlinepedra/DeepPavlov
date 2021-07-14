@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import datetime
+import itertools
 import json
 import time
 from itertools import islice
@@ -269,6 +270,35 @@ class NNTrainer(FitTrainer):
         if data is not None:
             report.update(data)
         self._chainer.process_event(event_name=event_name, data=report)
+        
+    def process_sample(self, x, y_true):
+        neg_samples_list = [sample[1][1:] for sample in x]
+        new_x = []
+        positive_idx_batch = []
+        contexts_batch = []
+        for n, (question, cur_contexts) in enumerate(x):
+            pos_context = cur_contexts[0]
+            neg_contexts = cur_contexts[1:]
+            if n == 0:
+                other_neg_contexts = neg_samples_list[n+1:]
+            elif n == len(x) - 1:
+                other_neg_contexts = neg_samples_list[:n]
+            else:
+                other_neg_contexts = neg_samples_list[:n] + neg_samples_list[n+1:]
+            other_neg_contexts = set(itertools.chain.from_iterable(other_neg_contexts))
+            new_neg_contexts = [elem for elem in neg_contexts if elem not in other_neg_contexts][:4]
+            neg_samples_list[n] = new_neg_contexts
+            all_contexts = [pos_context] + new_neg_contexts
+            new_x.append((question, all_contexts))
+            contexts_batch.append(all_contexts)
+        contexts_len_list = [len(all_contexts) for all_contexts in contexts_batch]
+        for i in range(len(contexts_len_list)):
+            if i == 0:
+                positive_idx_batch.append(i)
+            else:
+                positive_idx_batch.append(sum(contexts_len_list[:i]))
+
+        return new_x, positive_idx_batch
 
     def train_on_batches(self, iterator: DataLearningIterator) -> None:
         """Train pipeline on batches using provided data iterator and initialization parameters"""
@@ -280,6 +310,7 @@ class NNTrainer(FitTrainer):
             impatient = False
             self._send_event(event_name='before_train')
             for x, y_true in iterator.gen_batches(self.batch_size, data_type='train'):
+                x, y_true = self.process_sample(x, y_true)
                 self.last_result = self._chainer.train_on_batch(x, y_true)
                 if self.last_result is None:
                     self.last_result = {}

@@ -167,6 +167,35 @@ class FitTrainer:
         """Calls :meth:`~fit_chainer` with provided data iterator as an argument"""
         self.fit_chainer(iterator)
         self._saved = True
+        
+    def process_sample(self, x, y_true):
+        neg_samples_list = [sample[1][1:] for sample in x]
+        new_x = []
+        positive_idx_batch = []
+        contexts_batch = []
+        for n, (question, cur_contexts) in enumerate(x):
+            pos_context = cur_contexts[0]
+            neg_contexts = cur_contexts[1:]
+            if n == 0:
+                other_neg_contexts = neg_samples_list[n+1:]
+            elif n == len(x) - 1:
+                other_neg_contexts = neg_samples_list[:n]
+            else:
+                other_neg_contexts = neg_samples_list[:n] + neg_samples_list[n+1:]
+            other_neg_contexts = set(itertools.chain.from_iterable(other_neg_contexts))
+            new_neg_contexts = [elem for elem in neg_contexts if elem not in other_neg_contexts][:4]
+            neg_samples_list[n] = new_neg_contexts
+            all_contexts = [pos_context] + new_neg_contexts
+            new_x.append((question, all_contexts))
+            contexts_batch.append(all_contexts)
+        contexts_len_list = [len(all_contexts) for all_contexts in contexts_batch]
+        for i in range(len(contexts_len_list)):
+            if i == 0:
+                positive_idx_batch.append(i)
+            else:
+                positive_idx_batch.append(sum(contexts_len_list[:i]))
+
+        return new_x, positive_idx_batch
 
     def test(self, data: Iterable[Tuple[Collection[Any], Collection[Any]]],
              metrics: Optional[Collection[Metric]] = None, *,
@@ -203,6 +232,7 @@ class FitTrainer:
         data = islice(data, self.max_test_batches)
 
         for x, y_true in data:
+            x, y_true = self.process_sample(x, y_true)
             examples += len(x)
             y_predicted = list(self._chainer.compute(list(x), list(y_true), targets=expected_outputs))
             if len(expected_outputs) == 1:

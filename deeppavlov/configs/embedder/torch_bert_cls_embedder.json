@@ -1,0 +1,45 @@
+{
+  "chainer": {
+    "in": ["texts"],
+    "pipe": [
+      {
+        "class_name": "torch_bert_cls_encoder",
+        "id": "embedder",
+        "pretrained_bert": "{TRANSFORMER}",
+        "weights_path": "{MODEL_PATH}/text_encoder.pth.tar",
+        "in": ["texts"],
+        "out": ["embs"]
+      }
+    ],
+    "out": ["embs"]
+  },
+  "metadata": {
+    "variables": {
+      "ROOT_PATH": "~/.deeppavlov",
+      "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
+      "MODELS_PATH": "{ROOT_PATH}/models",
+      "CONFIGS_PATH": "{DEEPPAVLOV_PATH}/configs",
+      "TRANSFORMER": "DeepPavlov/rubert-base-cased",
+      "MODEL_PATH": "{MODELS_PATH}/el_in_batch_ranking"
+    },
+    "requirements": [
+      "{DEEPPAVLOV_PATH}/requirements/tf.txt",
+      "{DEEPPAVLOV_PATH}/requirements/bert_dp.txt",
+      "{DEEPPAVLOV_PATH}/requirements/faiss.txt"
+    ],
+    "download": [
+      {
+        "url": "http://files.deeppavlov.ai/kbqa/wikidata/entity_linking_rus_vx.tar.gz",
+        "subdir": "{DOWNLOADS_PATH}/wikidata_rus"
+      },
+      {
+        "url": "http://files.deeppavlov.ai/kbqa/models/entity_ranking_bert_rus_no_mention.tar.gz",
+        "subdir": "{MODELS_PATH}/entity_ranking_bert_rus_no_mention"
+      },
+      {
+        "url": "http://files.deeppavlov.ai/kbqa/wikidata/q_to_descr_vx.pickle",
+        "subdir": "{DOWNLOADS_PATH}/wikidata_rus"
+      }
+    ]
+  }
+}
