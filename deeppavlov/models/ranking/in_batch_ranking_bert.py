@@ -13,8 +13,10 @@ from torch import Tensor
 from deeppavlov.core.commands.utils import expand_path
 from transformers import AutoConfig, AutoTokenizer, AutoModel, BertModel, BertTokenizer
 from deeppavlov.core.common.errors import ConfigError
+from deeppavlov.core.common.file import load_pickle
 from deeppavlov.core.common.registry import register
 from deeppavlov.core.models.torch_model import TorchModel
+from deeppavlov.models.ranking.siamese_el_ranking_bert import BilinearRanking
 
 log = getLogger(__name__)
 
@@ -223,7 +225,6 @@ class TorchBertCLSEncoder:
         self.text_encoder = AutoModel.from_config(config=self.config)
         #self.text_encoder.resize_token_embeddings(len(self.tokenizer) + 1)
         self.weights_path = expand_path(weights_path)
-        print("weights_path", str(self.weights_path))
         checkpoint = torch.load(self.weights_path, map_location=self.device)
         self.text_encoder.load_state_dict(checkpoint["model_state_dict"])
         self.text_encoder.to(self.device)
@@ -241,3 +242,82 @@ class TorchBertCLSEncoder:
         _, text_cls_emb, _ = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask)
         text_cls_emb = text_cls_emb.detach().cpu().numpy()
         return text_cls_emb
+
+
+@register('torch_bert_entity_ranker')
+class TorchBertEntityRanker:
+    def __init__(self, pretrained_bert,
+                       context_weights_path,
+                       bilinear_weights_path,
+                       q_to_descr_emb_path,
+                       special_token_id: int,
+                       add_special_tokens=["[ENT]"],
+                       do_lower_case: bool = False,
+                       device: str = "gpu", **kwargs):
+        self.device = torch.device("cuda" if torch.cuda.is_available() and device == "gpu" else "cpu")
+        self.pretrained_bert = pretrained_bert
+        self.tokenizer = BertTokenizer.from_pretrained(self.pretrained_bert, do_lower_case=do_lower_case)
+        if add_special_tokens is not None:
+            special_tokens_dict = {'additional_special_tokens': add_special_tokens}
+            num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
+        self.text_encoder, self.config = None, None
+        self.config = AutoConfig.from_pretrained(self.pretrained_bert, output_hidden_states=True)
+        self.text_encoder = BertModel.from_pretrained(self.pretrained_bert, config=self.config)
+        self.text_encoder.resize_token_embeddings(len(self.tokenizer))
+        self.context_weights_path = expand_path(context_weights_path)
+        self.bilinear_weights_path = bilinear_weights_path
+        self.q_to_descr_emb_path = q_to_descr_emb_path
+        context_checkpoint = torch.load(self.context_weights_path, map_location=self.device)
+        self.text_encoder.load_state_dict(context_checkpoint["model_state_dict"])
+        self.text_encoder.to(self.device)
+        self.bilinear_ranking = BilinearRanking()
+        bilinear_checkpoint = torch.load(self.bilinear_weights_path, map_location=self.device)
+        self.bilinear_ranking.load_state_dict(bilinear_checkpoint["model_state_dict"])
+        self.bilinear_ranking.to(self.device)
+        self.q_to_descr_emb = load_pickle(self.q_to_descr_emb_path)
+        self.special_token_id = special_token_id
+        self.zero_emb = np.zeros(768, dtype=np.float32)
+
+    def __call__(self, contexts_batch: List[str],
+                       candidate_entities_batch: List[List[str]]):
+        
+        tokenizer_input = [[text, None] for text in contexts_batch]
+        encoding = self.tokenizer.batch_encode_plus(
+            tokenizer_input, add_special_tokens = True, pad_to_max_length=True,
+            return_attention_mask = True)
+        context_input_ids = encoding["input_ids"]
+        context_attention_mask = encoding["attention_mask"]
+        context_input_ids = torch.LongTensor(context_input_ids).to(self.device)
+        context_attention_mask = torch.LongTensor(context_attention_mask).to(self.device)
+        special_tokens_pos = []
+        for input_ids_list in context_input_ids:
+            found_n = -1
+            for n, input_id in enumerate(input_ids_list):
+                if input_id == self.special_token_id:
+                    found_n = n
+                    break
+            if found_n == -1:
+                found_n = 0
+            special_tokens_pos.append(found_n)
+        
+        context_hidden_states, *_ = self.text_encoder(input_ids=context_input_ids,
+                                                      attention_mask=context_attention_mask)
+        entity_emb_batch = []
+        for i in range(len(special_tokens_pos)):
+            pos = special_tokens_pos[i]
+            entity_emb_batch.append(context_hidden_states[i, pos])
+            
+        scores_batch = []
+        for entity_emb, candidate_entities_list in zip(entity_emb_batch, candidate_entities_batch):
+            entity_emb = [entity_emb for _ in candidate_entities_list]
+            entity_emb = torch.stack(entity_emb, dim=0).to(self.device)
+            candidate_entities_emb = [self.q_to_descr_emb.get(entity, self.zero_emb) for entity in candidate_entities_list]
+            candidate_entities_emb = torch.Tensor(candidate_entities_emb).to(self.device)
+            scores_list, _ = self.bilinear_ranking(entity_emb, candidate_entities_emb)
+            scores_list = scores_list.detach().cpu().numpy()
+            scores_list = [score[1] for score in scores_list]
+            entities_with_scores = [(entity, score) for entity, score in zip(candidate_entities_list, scores_list)]
+            entities_with_scores = sorted(entities_with_scores, key=lambda x: x[1], reverse=True)
+            scores_batch.append(entities_with_scores)
+
+        return scores_batch
