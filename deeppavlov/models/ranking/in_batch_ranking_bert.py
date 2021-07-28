@@ -33,7 +33,7 @@ class BertRanker(TorchModel):
             bert_config_file: Optional[str] = None,
             criterion: str = "CrossEntropyLoss",
             optimizer: str = "AdamW",
-            optimizer_parameters: Dict = {"lr": 5e-5, "weight_decay": 0.01, "eps": 1e-6},
+            optimizer_parameters: Dict = {"lr": 1e-5, "weight_decay": 0.01, "eps": 1e-6},
             return_probas: bool = False,
             attention_probs_keep_prob: Optional[float] = None,
             hidden_keep_prob: Optional[float] = None,
@@ -49,6 +49,7 @@ class BertRanker(TorchModel):
         self.attention_probs_keep_prob = attention_probs_keep_prob
         self.hidden_keep_prob = hidden_keep_prob
         self.clip_norm = clip_norm
+        self.batch_num = 0
 
         super().__init__(
             model_name=model_name,
@@ -63,6 +64,7 @@ class BertRanker(TorchModel):
                              positive_idx: List[List[int]]) -> float:
 
         _input = {'positive_idx': positive_idx}
+        print("positive_idx", positive_idx)
         for elem in ['input_ids', 'attention_mask']:
             inp_elem = [f[elem] for f in q_features]
             _input[f"q_{elem}"] = torch.LongTensor(inp_elem).to(self.device)
@@ -70,13 +72,18 @@ class BertRanker(TorchModel):
             inp_elem = [f[elem] for c_features in c_features_list for f in c_features]
             _input[f"c_{elem}"] = torch.LongTensor(inp_elem).to(self.device)
 
-        self.model.train()
-        self.model.zero_grad()
-        self.optimizer.zero_grad()      # zero the parameter gradients
+        if self.batch_num % 10 == 1:
+            self.model.train()
+            self.model.zero_grad()
+            self.optimizer.zero_grad()      # zero the parameter gradients
 
         loss, softmax_scores = self.model(**_input)
         loss.backward()
-        self.optimizer.step()
+        
+        if self.batch_num % 10 == 0:
+            self.optimizer.step()
+        
+        self.batch_num += 1
 
         # Clip the norm of the gradients to prevent the "exploding gradients" problem
         if self.clip_norm:
@@ -102,8 +109,9 @@ class BertRanker(TorchModel):
 
         with torch.no_grad():
             softmax_scores = self.model(**_input)
-            pred = torch.argmax(softmax_scores, dim=1).cpu().numpy()
-            
+            pred = torch.argmax(softmax_scores, dim=1)
+            pred = pred.cpu()
+            pred = pred.numpy()
         return pred
 
     def in_batch_ranking_model(self, **kwargs) -> nn.Module:
@@ -140,6 +148,7 @@ class BertRanking(nn.Module):
             pretrained_bert: str = None,
             bert_tokenizer_config_file: str = None,
             bert_config_file: str = None,
+            c_batch_size: int = 3,
             device: str = "gpu"
     ):
         super().__init__()
@@ -147,6 +156,7 @@ class BertRanking(nn.Module):
         self.text_encoder_save_path = text_encoder_save_path
         self.descr_encoder_save_path = descr_encoder_save_path
         self.bert_config_file = bert_config_file
+        self.c_batch_size = c_batch_size
         self.device = device
 
         # initialize parameters that would be filled later
@@ -172,8 +182,24 @@ class BertRanking(nn.Module):
     ) -> Union[Tuple[Any, Tensor], Tuple[Tensor]]:
 
         q_hidden_states, q_cls_emb, _ = self.q_encoder(input_ids=q_input_ids, attention_mask=q_attention_mask)
+        '''
+        n_batches = len(c_input_ids) // self.c_batch_size + int(len(c_input_ids) % self.c_batch_size > 0)
+        print("n_batches", n_batches, len(c_input_ids))
+        c_cls_emb_list = []
+        for i in range(n_batches):
+            cur_c_input_ids = c_input_ids[i*self.c_batch_size:(i+1)*self.c_batch_size]
+            cur_c_att_mask = c_attention_mask[i*self.c_batch_size:(i+1)*self.c_batch_size]
+            print("cur_C_input_ids", len(cur_c_input_ids), "cur_c_att_mask", len(cur_c_att_mask))
+            c_hidden_states, c_cls_emb, _ = self.c_encoder(input_ids=cur_c_input_ids, attention_mask=cur_c_att_mask)
+            for c_cls_emb_elem in c_cls_emb:
+                c_cls_emb_list.append(c_cls_emb_elem)
+        c_cls_emb_list = torch.stack(c_cls_emb_list, dim=0)
+            
+        dot_products = torch.matmul(q_cls_emb, torch.transpose(c_cls_emb_list, 0, 1))
+        '''
         c_hidden_states, c_cls_emb, _ = self.c_encoder(input_ids=c_input_ids, attention_mask=c_attention_mask)
         dot_products = torch.matmul(q_cls_emb, torch.transpose(c_cls_emb, 0, 1))
+        
         softmax_scores = F.log_softmax(dot_products, dim=1)
         if positive_idx is not None:
             loss = F.nll_loss(softmax_scores, torch.tensor(positive_idx).to(softmax_scores.device), reduction="mean")
