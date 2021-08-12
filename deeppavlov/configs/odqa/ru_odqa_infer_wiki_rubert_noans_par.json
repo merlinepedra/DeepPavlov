@@ -1,0 +1,99 @@
+{
+  "chainer": {
+    "in": ["question_raw"],
+    "pipe": [
+      {
+        "class_name": "ner_chunker",
+        "batch_size": 16,
+        "in": ["question_raw"],
+        "out": ["x_chunk", "chunk_nums", "chunk_sentences_offsets", "chunk_sentences"]
+      },
+      {
+        "thres_proba": 0.05,
+        "o_tag": "O",
+        "tags_file": "{NER_PATH}/tag.dict",
+        "return_entities_with_tags": true,
+        "class_name": "entity_detection_parser",
+        "id": "edp"
+      },
+      {
+        "class_name": "ner_chunk_model",
+        "ner": {"config_path": "{CONFIGS_PATH}/ner/ner_rured.json"},
+        "ner_parser": "#edp",
+        "in": ["x_chunk", "chunk_nums", "chunk_sentences_offsets", "chunk_sentences"],
+        "out": ["entity_substr", "entity_offsets", "tags", "probas", "sentences_offsets",
+                "sentences", "tokens", "entity_positions", "sentences_tokens"]
+      },
+      {
+        "config_path": "{CONFIGS_PATH}/syntax/syntax_ru_syntagrus_bert.json",
+        "id": "syntax_parser",
+        "in": ["question_raw"],
+        "out": ["question_syntax_info"]
+      },
+      {
+        "config_path": "{CONFIGS_PATH}/doc_retrieval/ru_ranker_tfidf_wiki_new.json",
+        "in": ["question_raw", "entity_substr", "tags"],
+        "out": ["tfidf_doc_ids"]
+      },
+      {
+        "class_name": "wiki_sqlite_vocab",
+        "in": ["tfidf_doc_ids"],
+        "out": ["tfidf_doc_text"],
+        "join_docs": false,
+        "shuffle": false,
+        "load_path": "/archive/evseev/.deeppavlov/downloads/paragraph_ranking/wikipedia_rus2.db"
+      },
+      {
+        "class_name": "filter_docs",
+        "top_n": 400,
+        "in": ["question_raw", "tfidf_doc_ids", "tfidf_doc_text"],
+        "out": ["filtered_doc_ids", "filtered_doc_text"]
+      },
+      {
+        "class_name": "string_multiplier",
+        "in": ["question_raw", "filtered_doc_text"],
+        "out":["questions"]
+      },
+      {
+        "class_name": "logit_ranker",
+        "batch_size": 10000,
+        "squad_model": {"config_path": "{CONFIGS_PATH}/squad/multi_squad_ru_retr_noans_rubert_infer.json"},
+        "sort_noans": true,
+        "top_n": 10,
+        "return_answer_sentence": true,
+        "in": [
+          "filtered_doc_text",
+          "questions",
+          "filtered_doc_ids"
+        ],
+        "out": [
+          "best_answer",
+          "best_answer_score",
+          "best_answer_place",
+          "best_answer_doc_ids",
+          "best_answer_sentences",
+          "best_answer_contexts"
+        ]
+      },
+      {
+        "class_name": "odqa_answer_processor",
+        "syntax_parser": "#syntax_parser",
+        "in": ["questions", "entity_substr", "question_syntax_info", "tags", "best_answer",
+               "best_answer_score", "best_answer_doc_ids", "best_answer_contexts"],
+        "out": ["selected_answer"]
+      }
+    ],
+    "out": ["selected_answer"]
+  },
+  "metadata": {
+    "variables": {
+      "ROOT_PATH": "/archive/evseev/.deeppavlov",
+      "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
+      "MODELS_PATH": "{ROOT_PATH}/models",
+      "CONFIGS_PATH": "{DEEPPAVLOV_PATH}/configs",
+      "NER_PATH": "/home/evseev/.deeppavlov/models/ner_rured"
+    },
+    "download": [
+    ]
+  }
+}
