@@ -1,0 +1,71 @@
+{
+  "dataset_reader": {
+    "class_name": "odqa_reader",
+    "data_path": "{DOWNLOADS_PATH}/odqa/ruwiki_par",
+    "save_path": "{DOWNLOADS_PATH}/odqa/ruwiki_par.db",
+    "dataset_format": "wiki"
+  },
+  "dataset_iterator": {
+    "class_name": "sqlite_iterator",
+    "shuffle": false,
+    "load_path": "/archive/evseev/.deeppavlov/downloads/paragraph_ranking/wikipedia_rus2.db"
+  },
+  "chainer": {
+    "in": ["docs", "entity_substr", "tags"],
+    "in_y": [
+      "doc_ids",
+      "doc_nums"
+    ],
+    "out": ["tfidf_doc_ids"],
+    "pipe": [
+      {
+        "class_name": "hashing_tfidf_vectorizer",
+        "id": "vectorizer",
+        "fit_on": [
+          "docs",
+          "doc_ids",
+          "doc_nums"
+        ],
+        "save_path": "{MODELS_PATH}/odqa/ruwiki_tfidf_matrix_par.npz",
+        "load_path": "{MODELS_PATH}/odqa/ruwiki_tfidf_matrix_par.npz",
+        "tokenizer": {
+          "class_name": "ru_tokenizer",
+          "lemmas": true,
+          "ngram_range": [1, 3]
+        }
+      },
+      {
+        "class_name": "tfidf_ranker",
+        "top_n": 10000,
+        "in": ["docs", "entity_substr", "tags"],
+        "out": [
+          "tfidf_doc_ids",
+          "tfidf_doc_scores"
+        ],
+        "vectorizer": "#vectorizer"
+      }
+    ]
+  },
+  "train": {
+    "batch_size": 10000,
+    "evaluation_targets": [],
+    "class_name": "fit_trainer"
+  },
+  "metadata": {
+    "variables": {
+      "ROOT_PATH": "/archive/evseev/.deeppavlov",
+      "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
+      "MODELS_PATH": "{ROOT_PATH}/models"
+    },
+    "download": [
+      {
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/qa_vtb/ruwiki_tfidf_matrix_par.tar.gz",
+        "subdir": "{MODELS_PATH}/odqa"
+      },
+      {
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/qa_vtb/ruwiki_db_par.tar.gz",
+        "subdir": "{DOWNLOADS_PATH}/odqa"
+      }
+    ]
+  }
+}
