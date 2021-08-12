@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+import time
 from logging import getLogger
 from typing import List, Dict, Tuple
 from collections import defaultdict
+from string import punctuation
 
 import numpy as np
 import pymorphy2
@@ -51,6 +54,8 @@ class NerChunker(Component):
         """
         self.max_chunk_len = max_chunk_len
         self.batch_size = batch_size
+        self.punct_ext = punctuation + " " + "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        self.russian_letters = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
 
     def __call__(self, docs_batch: List[str]) -> Tuple[List[List[str]], List[List[int]]]:
         """
@@ -67,38 +72,248 @@ class NerChunker(Component):
         text_batch = []
         nums_batch_list = []
         nums_batch = []
+        sentences_offsets_batch_list = []
+        sentences_offsets_batch = []
+        sentences_offsets_list = []
+        sentences_batch_list = []
+        sentences_batch = []
+        sentences_list = []
         count_texts = 0
         text = ""
         curr_doc = 0
+        cur_len = 0
+        start = 0
         for n, doc in enumerate(docs_batch):
+            doc = self.sanitize(doc)
             sentences = sent_tokenize(doc)
             for sentence in sentences:
-                if len(text) + len(sentence) < self.max_chunk_len and n == curr_doc:
+                sentence_len = len(sentence.split())
+                if cur_len + sentence_len < self.max_chunk_len and n == curr_doc:
                     text += f"{sentence} "
+                    cur_len += sentence_len
+                    end = start + len(sentence)
+                    sentences_offsets_list.append((start, end))
+                    sentences_list.append(sentence)
+                    start = end + 1
                 else:
                     if count_texts < self.batch_size:
-                        text_batch.append(text.strip())
-                        if n == curr_doc:
-                            nums_batch.append(n)
-                        else:
-                            nums_batch.append(n - 1)
-                        count_texts += 1
+                        text = text.strip()
+                        if text:
+                            text_batch.append(text)
+                            sentences_offsets_batch.append(sentences_offsets_list)
+                            sentences_batch.append(sentences_list)
+                            if n == curr_doc:
+                                nums_batch.append(n)
+                            else:
+                                nums_batch.append(n - 1)
+                            count_texts += 1
                     else:
                         text_batch_list.append(text_batch)
                         text_batch = []
                         nums_batch_list.append(nums_batch)
                         nums_batch = [n]
+                        sentences_offsets_batch_list.append(sentences_offsets_batch)
+                        sentences_batch_list.append(sentences_batch)
                         count_texts = 0
                     curr_doc = n
                     text = f"{sentence} "
+                    cur_len = len(sentence.split())
+                    start = 0
+                    end = start + len(sentence)
+                    sentences_offsets_list = [(start, end)]
+                    sentences_list = [sentence]
+                    start = end + 1
 
+        text = text.strip()
         if text:
-            text_batch.append(text.strip())
+            text_batch.append(text)
             text_batch_list.append(text_batch)
             nums_batch.append(len(docs_batch) - 1)
             nums_batch_list.append(nums_batch)
+            sentences_offsets_batch.append(sentences_offsets_list)
+            sentences_offsets_batch_list.append(sentences_offsets_batch)
+            sentences_batch.append(sentences_list)
+            sentences_batch_list.append(sentences_batch)
 
-        return text_batch_list, nums_batch_list
+        return text_batch_list, nums_batch_list, sentences_offsets_batch_list, sentences_batch_list
+
+    def sanitize(self, text):
+        text_len = len(text)
+        if text[text_len - 1] not in {'.', '!', '?'}:
+            i = text_len - 1
+            while text[i] in self.punct_ext and i > 0:
+                i -= 1
+                if (text[i] in {'.', '!', '?'} and text[i - 1].lower() in self.russian_letters) or \
+                        (i > 1 and text[i] in {'.', '!', '?'} and text[i - 1] in '"' and text[
+                            i - 2].lower() in self.russian_letters):
+                    break
+
+            text = text[:i + 1]
+        text = re.sub(r'\s+', ' ', text)
+        return text
+
+
+@register('ner_chunk_model')
+class NerChunkModel(Component):
+    """
+        Class for linking of entity substrings in the document to entities in Wikidata
+    """
+
+    def __init__(self, ner: Chainer,
+                 ner_parser: EntityDetectionParser,
+                 **kwargs) -> None:
+        """
+
+        Args:
+            ner: config for entity detection
+            ner_parser: component deeppavlov.models.kbqa.entity_detection_parser
+            **kwargs:
+        """
+        self.ner = ner
+        self.ner_parser = ner_parser
+
+    def __call__(self, text_batch_list: List[List[str]],
+                 nums_batch_list: List[List[int]],
+                 sentences_offsets_batch_list: List[List[List[Tuple[int, int]]]],
+                 sentences_batch_list: List[List[List[str]]]
+                 ):
+        entity_substr_batch_list = []
+        entity_offsets_batch_list = []
+        tags_batch_list = []
+        entity_probas_batch_list = []
+        text_len_batch_list = []
+        ner_tokens_batch_list = []
+        entity_positions_batch_list = []
+        sentences_tokens_batch_list = []
+        for text_batch, sentences_offsets_batch, sentences_batch in \
+                zip(text_batch_list, sentences_offsets_batch_list, sentences_batch_list):
+            tm_ner_st = time.time()
+            ner_tokens_batch, ner_tokens_offsets_batch, ner_probas_batch, probas_batch = self.ner(text_batch)
+            entity_substr_batch, entity_positions_batch, entity_probas_batch = \
+                self.ner_parser(ner_tokens_batch, ner_probas_batch, probas_batch)
+            tm_ner_end = time.time()
+            log.debug(f"ner time {tm_ner_end - tm_ner_st}")
+            log.debug(f"entity_substr_batch {entity_substr_batch}")
+            log.debug(f"entity_positions_batch {entity_positions_batch}")
+            entity_pos_tags_probas_batch = [[(entity_substr.lower(), entity_substr_positions, tag, entity_proba)
+                                             for tag, entity_substr_list in entity_substr_dict.items()
+                                             for entity_substr, entity_substr_positions, entity_proba in
+                                             zip(entity_substr_list, entity_positions_dict[tag],
+                                                 entity_probas_dict[tag])]
+                                            for entity_substr_dict, entity_positions_dict, entity_probas_dict in
+                                            zip(entity_substr_batch, entity_positions_batch, entity_probas_batch)]
+            entity_substr_batch = []
+            entity_offsets_batch = []
+            tags_batch = []
+            probas_batch = []
+            pr_entity_positions_batch = []
+            for entity_pos_tags_probas, ner_tokens_offsets_list in \
+                    zip(entity_pos_tags_probas_batch, ner_tokens_offsets_batch):
+                if entity_pos_tags_probas:
+                    entity_offsets_list = []
+                    entity_substr_list, entity_positions_list, tags_list, probas_list = zip(*entity_pos_tags_probas)
+                    for entity_positions in entity_positions_list:
+                        start_offset = ner_tokens_offsets_list[entity_positions[0]][0]
+                        end_offset = ner_tokens_offsets_list[entity_positions[-1]][1]
+                        entity_offsets_list.append((start_offset, end_offset))
+                else:
+                    entity_substr_list, entity_offsets_list, tags_list, probas_list, entity_positions_list = [], [], [], [], []
+                entity_substr_batch.append(list(entity_substr_list))
+                entity_offsets_batch.append(list(entity_offsets_list))
+                tags_batch.append(list(tags_list))
+                probas_batch.append(list(probas_list))
+                pr_entity_positions_batch.append(list(entity_positions_list))
+                
+            sentences_tokens_batch = []
+            for sentences_offsets_list, ner_tokens_list, ner_tokens_offsets_list in \
+                zip(sentences_offsets_batch, ner_tokens_batch, ner_tokens_offsets_batch):
+                sentences_tokens_list = []
+                for start_offset, end_offset in sentences_offsets_list:
+                    sentence_tokens = []
+                    for tok, (start_tok_offset, end_tok_offset) in zip(ner_tokens_list, ner_tokens_offsets_list):
+                        if start_tok_offset >= start_offset and end_tok_offset <= end_offset:
+                            sentence_tokens.append(tok)
+                    sentences_tokens_list.append(sentence_tokens)
+                sentences_tokens_batch.append(sentences_tokens_list)
+
+            log.debug(f"entity_substr_batch {entity_substr_batch}")
+            log.debug(f"entity_offsets_batch {entity_offsets_batch}")
+
+            entity_substr_batch_list.append(entity_substr_batch)
+            tags_batch_list.append(tags_batch)
+            entity_offsets_batch_list.append(entity_offsets_batch)
+            entity_probas_batch_list.append(probas_batch)
+            text_len_batch_list.append([len(text) for text in text_batch])
+            ner_tokens_batch_list.append(ner_tokens_batch)
+            entity_positions_batch_list.append(pr_entity_positions_batch)
+            sentences_tokens_batch_list.append(sentences_tokens_batch)
+
+        doc_entity_substr_batch, doc_tags_batch, doc_entity_offsets_batch, doc_probas_batch = [], [], [], []
+        doc_sentences_offsets_batch, doc_sentences_batch = [], []
+        doc_ner_tokens_batch, doc_entity_positions_batch, doc_sentences_tokens_batch = [], [], []
+        doc_entity_substr, doc_tags, doc_probas, doc_entity_offsets = [], [], [], []
+        doc_sentences_offsets, doc_sentences = [], []
+        doc_ner_tokens, doc_entity_positions, doc_sentences_tokens = [], [], []
+        cur_doc_num = 0
+        text_len_sum = 0
+        tokens_len_sum = 0
+        for entity_substr_batch, tags_batch, probas_batch, entity_offsets_batch, sentences_offsets_batch, \
+            sentences_batch, text_len_batch, nums_batch, ner_tokens_batch, entity_positions_batch, sentences_tokens_batch in \
+                zip(entity_substr_batch_list, tags_batch_list, entity_probas_batch_list, entity_offsets_batch_list,
+                    sentences_offsets_batch_list, sentences_batch_list, text_len_batch_list, nums_batch_list,
+                    ner_tokens_batch_list, entity_positions_batch_list, sentences_tokens_batch_list):
+            for entity_substr, tag, probas, entity_offsets, sentences_offsets, sentences, text_len, doc_num, \
+                    ner_tokens, entity_positions, sentences_tokens in \
+                    zip(entity_substr_batch, tags_batch, probas_batch, entity_offsets_batch, sentences_offsets_batch,
+                        sentences_batch, text_len_batch, nums_batch, ner_tokens_batch, entity_positions_batch, sentences_tokens_batch):
+                print("entity_positions", entity_positions)
+                if doc_num == cur_doc_num:
+                    doc_entity_substr += entity_substr
+                    doc_tags += tag
+                    doc_probas += probas
+                    doc_entity_offsets += [(start_offset + text_len_sum, end_offset + text_len_sum)
+                                           for start_offset, end_offset in entity_offsets]
+                    doc_sentences_offsets += [(start_offset + text_len_sum, end_offset + text_len_sum)
+                                              for start_offset, end_offset in sentences_offsets]
+                    doc_entity_positions += [[pos + tokens_len_sum for pos in entity_position] for entity_position in entity_positions]
+                    doc_sentences += sentences
+                    text_len_sum += text_len + 1
+                    doc_ner_tokens += ner_tokens
+                    tokens_len_sum += len(ner_tokens)
+                    doc_sentences_tokens += sentences_tokens
+                else:
+                    doc_entity_substr_batch.append(doc_entity_substr)
+                    doc_tags_batch.append(doc_tags)
+                    doc_probas_batch.append(doc_probas)
+                    doc_entity_offsets_batch.append(doc_entity_offsets)
+                    doc_sentences_offsets_batch.append(doc_sentences_offsets)
+                    doc_sentences_batch.append(doc_sentences)
+                    doc_ner_tokens_batch.append(doc_ner_tokens)
+                    doc_sentences_tokens_batch.append(doc_sentences_tokens)
+                    doc_entity_substr = entity_substr
+                    doc_tags = tag
+                    doc_probas = probas
+                    doc_entity_offsets = entity_offsets
+                    doc_sentences_offsets = sentences_offsets
+                    doc_entity_positions = entity_positions
+                    doc_sentences = sentences
+                    cur_doc_num = doc_num
+                    text_len_sum = text_len
+                    doc_ner_tokens = ner_tokens
+                    doc_sentences_tokens = sentences_tokens
+                    tokens_len_sum = len(ner_tokens)
+        doc_entity_substr_batch.append(doc_entity_substr)
+        doc_tags_batch.append(doc_tags)
+        doc_probas_batch.append(doc_probas)
+        doc_entity_offsets_batch.append(doc_entity_offsets)
+        doc_sentences_offsets_batch.append(doc_sentences_offsets)
+        doc_entity_positions_batch.append(doc_entity_positions)
+        doc_sentences_batch.append(doc_sentences)
+        doc_ner_tokens_batch.append(doc_ner_tokens)
+        doc_sentences_tokens_batch.append(doc_sentences_tokens)
+
+        return doc_entity_substr_batch, doc_entity_offsets_batch, doc_tags_batch, doc_probas_batch, \
+               doc_sentences_offsets_batch, doc_sentences_batch, doc_ner_tokens_batch, doc_entity_positions_batch, doc_sentences_tokens_batch
 
 
 @register('entity_linker')

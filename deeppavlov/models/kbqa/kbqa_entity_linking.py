@@ -30,7 +30,7 @@ from deeppavlov.core.models.serializable import Serializable
 from deeppavlov.core.commands.utils import expand_path
 from deeppavlov.core.common.file import load_pickle, save_pickle
 from deeppavlov.models.spelling_correction.levenshtein.levenshtein_searcher import LevenshteinSearcher
-from deeppavlov.models.kbqa.rel_ranking_bert_infer import RelRankerBertInfer
+from deeppavlov.models.kbqa.rel_ranking_infer import RelRankerInfer
 
 log = getLogger(__name__)
 
@@ -54,9 +54,9 @@ class KBEntityLinker(Component, Serializable):
                  who_entities_filename: Optional[str] = None,
                  save_path: str = None,
                  q2descr_filename: str = None,
-                 descr_rank_score_thres: float = 0.01,
+                 descr_rank_score_thres: float = 0.1,
                  freq_dict_filename: Optional[str] = None,
-                 entity_ranker: RelRankerBertInfer = None,
+                 entity_ranker: RelRankerInfer = None,
                  build_inverted_index: bool = False,
                  kb_format: str = "hdt",
                  kb_filename: str = None,
@@ -69,6 +69,7 @@ class KBEntityLinker(Component, Serializable):
                  use_descriptions: bool = False,
                  include_mention: bool = False,
                  num_entities_to_return: int = 5,
+                 num_entities_for_bert_ranking: int = 100,
                  lemmatize: bool = False,
                  use_prefix_tree: bool = False,
                  **kwargs) -> None:
@@ -87,7 +88,7 @@ class KBEntityLinker(Component, Serializable):
             descr_rank_score_thres: if the score of the entity description is less than threshold, the entity is not
                 added to output list
             freq_dict_filename: filename with frequences dictionary of Russian words
-            entity_ranker: component deeppavlov.models.kbqa.rel_ranker_bert_infer
+            entity_ranker: component deeppavlov.models.kbqa.rel_ranker_infer
             build_inverted_index: if "true", inverted index of entities of the KB will be built
             kb_format: "hdt" or "sqlite3"
             kb_filename: file with the knowledge base, which will be used for building of inverted index
@@ -138,6 +139,18 @@ class KBEntityLinker(Component, Serializable):
         self.use_descriptions = use_descriptions
         self.include_mention = include_mention
         self.num_entities_to_return = num_entities_to_return
+        self.num_entities_for_bert_ranking = num_entities_for_bert_ranking
+        self.black_list_what_is = set(["Q277759", # book series
+                                       "Q11424", # film
+                                       "Q7889", # video game
+                                       "Q2743", # musical theatre
+                                       "Q5398426", # tv series
+                                       "Q506240", # television film
+                                       "Q21191270", # television series episode
+                                       "Q7725634", # literary work
+                                       "Q131436", # board game
+                                       "Q1783817" # cooperative board game
+                                      ])
         if self.use_descriptions and self.entity_ranker is None:
             raise ValueError("No entity ranker is provided!")
 
@@ -195,6 +208,7 @@ class KBEntityLinker(Component, Serializable):
                  context_batch: List[str] = None,
                  entity_types_batch: List[List[List[str]]] = None) -> Tuple[
         List[List[List[str]]], List[List[List[float]]]]:
+        log.info(f"entity_substr_batch {entity_substr_batch} templates_batch {templates_batch} context_batch {context_batch}")
         entity_ids_batch = []
         confidences_batch = []
         if templates_batch is None:
@@ -231,10 +245,16 @@ class KBEntityLinker(Component, Serializable):
             entities_ids = ['None']
         else:
             candidate_entities = self.candidate_entities_inverted_index(entity)
-            if entity_types and self.types_dict:
-                entity_types = set(entity_types)
-                candidate_entities = [entity for entity in candidate_entities if
-                                      self.types_dict.get(entity[1], set()).intersection(entity_types)]
+            if self.types_dict:
+                if entity_types:
+                    entity_types = set(entity_types)
+                    candidate_entities = [entity for entity in candidate_entities if
+                                          self.types_dict.get(entity[1], set()).intersection(entity_types)]
+                if template_found in ["what is xxx?", "what was xxx?"]:
+                    candidate_entities_filtered = [entity for entity in candidate_entities if
+                        not self.types_dict.get(entity[1], set()).intersection(self.black_list_what_is)]
+                    if candidate_entities_filtered:
+                        candidate_entities = candidate_entities_filtered
             if cut_entity and candidate_entities and len(entity.split()) > 1 and candidate_entities[0][3] == 1:
                 entity = self.cut_entity_substr(entity)
                 candidate_entities = self.candidate_entities_inverted_index(entity)
@@ -253,7 +273,15 @@ class KBEntityLinker(Component, Serializable):
         words_with_freq = [(word, self.nouns_dict.get(word, 0.0)) for word in normal_form_tokens]
         words_with_freq = sorted(words_with_freq, key=lambda x: x[1])
         return words_with_freq[0][0]
-
+    
+    def morph_parse(self, word):
+        morph_parse_tok = self.morph.parse(word)[0]
+        if morph_parse_tok.tag.POS in {"NOUN", "ADJ", "ADJF"}:
+            normal_form = morph_parse_tok.inflect({"nomn"}).word
+        else:
+            normal_form = morph_parse_tok.normal_form
+        return normal_form
+    
     def candidate_entities_inverted_index(self, entity: str) -> List[Tuple[Any, Any, Any]]:
         word_tokens = nltk.word_tokenize(entity.lower())
         word_tokens = [word for word in word_tokens if word not in self.stopwords]
@@ -290,6 +318,8 @@ class KBEntityLinker(Component, Serializable):
         for candidate_entities_for_tok in candidate_entities_for_tokens:
             candidate_entities += list(candidate_entities_for_tok)
         candidate_entities = Counter(candidate_entities).most_common()
+        candidate_entities = sorted(candidate_entities, key=lambda x: (x[0][1], x[1]), reverse=True)
+        candidate_entities = candidate_entities[:1000]
         candidate_entities = [(entity_num, self.entities_list[entity_num], entity_freq, count) for \
                               (entity_num, entity_freq), count in candidate_entities]
 
@@ -299,30 +329,57 @@ class KBEntityLinker(Component, Serializable):
                             candidate_names: List[List[str]],
                             entity: str,
                             context: str = None) -> Tuple[List[str], List[float], List[Tuple[str, str, int, int]]]:
+        entity_len = len(entity.split())
+        entity_tokens = nltk.word_tokenize(entity.lower())
+        entity_tokens = [word for word in entity_tokens if (word not in self.stopwords and len(word) > 1)]
+        entity_tokens_lemm = [self.morph_parse(tok) for tok in entity_tokens]
         entities_ratios = []
         for candidate, entity_names in zip(candidate_entities, candidate_names):
             entity_num, entity_id, num_rels, tokens_matched = candidate
             fuzz_ratio = max([fuzz.ratio(name.lower(), entity) for name in entity_names])
-            entities_ratios.append((entity_num, entity_id, tokens_matched, fuzz_ratio, num_rels))
+            tokens_matched_new = 0
+            for name in entity_names:
+                cur_tokens_matched = 0
+                name_tokens = nltk.word_tokenize(name.lower())
+                for entity_token, entity_token_lemm in zip(entity_tokens, entity_tokens_lemm):
+                    if entity_token in name_tokens or entity_token_lemm in name_tokens:
+                        cur_tokens_matched += 1
+                if cur_tokens_matched > tokens_matched_new:
+                    tokens_matched_new = cur_tokens_matched
+        
+            entities_ratios.append((entity_num, entity_id, tokens_matched_new, fuzz_ratio, num_rels))
 
         srtd_with_ratios = sorted(entities_ratios, key=lambda x: (x[2], x[3], x[4]), reverse=True)
         if self.use_descriptions:
-            log.debug(f"context {context}")
-            id_to_score = {entity_id: (tokens_matched, score) for _, entity_id, tokens_matched, score, _ in
-                           srtd_with_ratios[:30]}
-            entity_ids = [entity_id for _, entity_id, _, _, _ in srtd_with_ratios[:30]]
+            log.debug(f"context {context} entity {entity}")
+            entity_reg = re.compile(entity, re.IGNORECASE)
+            context = re.sub(entity_reg, "[ENT]", context)
+            log.debug(f"replaced context {context}")
+            id_to_score = {entity_id: (tokens_matched, score, num_rels) for _, entity_id, tokens_matched, score, num_rels in
+                           srtd_with_ratios[:self.num_entities_for_bert_ranking]}
+            entity_ids = [entity_id for _, entity_id, _, _, _ in srtd_with_ratios[:self.num_entities_for_bert_ranking]]
             scores = self.entity_ranker.rank_rels(context, entity_ids)
-            entities_with_scores = [(entity_id, id_to_score[entity_id][0], id_to_score[entity_id][1], score) for
+            entities_with_scores = [(entity_id, id_to_score[entity_id][0], id_to_score[entity_id][1],
+                                     id_to_score[entity_id][2], score) for
                                     entity_id, score in scores]
-            entities_with_scores = sorted(entities_with_scores, key=lambda x: (x[1], x[2], x[3]), reverse=True)
+            entities_with_scores = sorted(entities_with_scores, key=lambda x: (x[1], x[2], x[4], x[3]), reverse=True)
             entities_with_scores = [entity for entity in entities_with_scores if \
-                                    (entity[3] > self.descr_rank_score_thres or entity[2] == 100.0)]
+                                    (entity[4] > self.descr_rank_score_thres or entity[2] == 100.0)]
+            '''
+            filtered_entities_with_scores = []
+            for elem in entities_with_scores[:5]:
+                if elem[2] > 0.85 and elem[3] > 40:
+                    filtered_entities_with_scores.append(elem)
+            if filtered_entities_with_scores:
+                entities_with_scores = filtered_entities_with_scores
+            '''
+            
             log.debug(f"entities_with_scores {entities_with_scores[:10]}")
-            entity_ids = [entity for entity, _, _, _ in entities_with_scores]
-            confidences = [score for _, _, _, score in entities_with_scores]
+            entity_ids = [entity for entity, *_ in entities_with_scores]
+            confidences = [score for *_, score in entities_with_scores]
         else:
             entity_ids = [ent[1] for ent in srtd_with_ratios]
-            confidences = [float(ent[2]) * 0.01 for ent in srtd_with_ratios]
+            confidences = [ent[3]*0.01 for ent in srtd_with_ratios]
 
         return entity_ids, confidences, srtd_with_ratios
 

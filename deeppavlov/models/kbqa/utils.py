@@ -15,6 +15,8 @@
 import re
 import itertools
 from typing import List, Tuple
+from deeppavlov.core.common.file import load_pickle
+from deeppavlov.core.commands.utils import expand_path
 
 
 def extract_year(question_tokens: List[str], question: str) -> str:
@@ -84,13 +86,13 @@ def fill_query(query: List[str], entity_comb: List[str], type_comb: List[str], r
                    rel_comb: ["P17"]
     '''
     query = " ".join(query)
-    map_query_str_to_wikidata = [("P0", "http://schema.org/description"),
-                                 ("wd:", "http://www.wikidata.org/entity/"),
-                                 ("wdt:", "http://www.wikidata.org/prop/direct/"),
-                                 (" p:", " http://www.wikidata.org/prop/"),
-                                 ("wdt:", "http://www.wikidata.org/prop/direct/"),
-                                 ("ps:", "http://www.wikidata.org/prop/statement/"),
-                                 ("pq:", "http://www.wikidata.org/prop/qualifier/")]
+    map_query_str_to_wikidata = [("P0", "http://wd"),
+                                 ("P00", "http://wl"),
+                                 ("wd:", "http://we/"),
+                                 ("wdt:", "http://wpd/"),
+                                 (" p:", " http://wp/"),
+                                 ("ps:", "http://wps/"),
+                                 ("pq:", "http://wpq/")]
 
     for query_str, wikidata_str in map_query_str_to_wikidata:
         query = query.replace(query_str, wikidata_str)
@@ -100,7 +102,8 @@ def fill_query(query: List[str], entity_comb: List[str], type_comb: List[str], r
         query = query.replace(f"t{n + 1}", entity_type)
     for n, (rel, score) in enumerate(rel_comb[:-1]):
         query = query.replace(f"r{n + 1}", rel)
-    query = query.replace("http://www.wikidata.org/prop/direct/P0", "http://schema.org/description")
+    query = query.replace("http://wpd/P0", "http://wd")
+    query = query.replace("http://wpd/P00", "http://wl")
     query = query.split(' ')
     return query
 
@@ -142,3 +145,42 @@ def fill_online_query(query: List[str], entity_comb: List[str], type_comb: List[
                     "?ent filter((?p1=schema:description)&&(lang(?ent)='en'))}}"
 
     return query, new_rels
+    
+class FilterAnswers:
+    def __init__(self, answer_types_filename: str):
+        if answer_types_filename:
+            self.q_answer_types = load_pickle(expand_path(answer_types_filename))
+        else:
+            self.q_answer_types = {}
+
+    def __call__(self, question: str, answer_types: List[str] = None):
+        # Q5 - human
+        # Q15773347 - film character
+        # Q95074 - fictional character
+        # Q15632617 - fictional human
+        # Q3658341 - literary character
+        # Q1114461 - comics character
+        # Q15711870 - animated character
+        # Q15773317 - television character
+        if answer_types:
+            if isinstance(answer_types, list):
+                if answer_types:
+                    if answer_types == ["no_type"]:
+                        return []
+                    else:
+                        return answer_types
+                elif "who" in question:
+                    return self.q_answer_types.get("who", [])
+                else:
+                    return []
+            if isinstance(answer_types, str):
+                if answer_types == "who":
+                    return self.q_answer_types.get("who", [])
+                elif answer_types == "where":
+                    return self.q_answer_types.get("where", [])
+                elif answer_types == "when":
+                    return ["date"]
+                else:
+                    return []
+        else:
+            return []

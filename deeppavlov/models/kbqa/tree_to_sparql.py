@@ -17,10 +17,12 @@ from typing import Any, List, Tuple, Dict, Union
 from logging import getLogger
 from collections import defaultdict
 
+import nltk
 import numpy as np
 import pymorphy2
 import re
 from scipy.sparse import csr_matrix
+from ufal_udpipe import Model as udModel, Pipeline
 from udapi.block.read.conllu import Conllu
 from udapi.core.node import Node
 
@@ -110,6 +112,33 @@ class RuAdjToNoun:
         return matrix
 
 
+@register('udpipe_parser')
+class UdpipeParser(Component):
+    """
+        Class for building syntactic trees from sentences using UDPipe
+    """
+
+    def __init__(self, udpipe_filename: str, **kwargs):
+        """
+
+        Args:
+            udpipe_filename: file with UDPipe model
+            **kwargs:
+        """
+        self.udpipe_filename = udpipe_filename
+        self.ud_model = udModel.load(str(expand_path(self.udpipe_filename)))
+        self.full_ud_model = Pipeline(self.ud_model, "vertical", Pipeline.DEFAULT, Pipeline.DEFAULT, "conllu")
+
+    def __call__(self, sentences_batch: List[str]):
+        conll_outputs = []
+        for sentence in sentences_batch:
+            sentence_tokens = nltk.word_tokenize(sentence)
+            sentence_inp = '\n'.join(sentence_tokens)
+            conll_output = self.full_ud_model.process(sentence_inp)
+            conll_outputs.append(conll_output)
+        return conll_outputs
+
+
 @register('tree_to_sparql')
 class TreeToSparql(Component):
     """
@@ -128,7 +157,7 @@ class TreeToSparql(Component):
         self.lang = lang
         if self.lang == "rus":
             self.q_pronouns = {"какой", "какая", "какое", "каком", "каким", "какую", "кто", "что", "как", "когда",
-                               "где", "чем", "сколько"}
+                               "где", "чем", "сколько", "кем", "каков", "какова"}
             self.how_many = "сколько"
             self.change_root_tokens = {"каким был", "какой была"}
             self.first_tokens = {"первый"}
@@ -160,6 +189,8 @@ class TreeToSparql(Component):
         entities_dict_batch = []
         types_dict_batch = []
         questions_batch = []
+        q_type_flags_batch = []
+        answer_type_str_batch = []
         count = False
         for syntax_tree, positions in zip(syntax_tree_batch, positions_batch):
             log.debug(f"\n{syntax_tree}")
@@ -167,10 +198,12 @@ class TreeToSparql(Component):
             root = self.find_root(tree)
             tree_desc = tree.descendants
             unknown_node = ""
+            q_type_flag = ""
             if root:
                 log.debug(f"syntax tree info, root: {root.form}")
-                unknown_node, unknown_branch = self.find_branch_with_unknown(root)
+                unknown_node, unknown_branch, q_type_flag = self.find_branch_with_unknown(root)
             positions = [num for position in positions for num in position]
+            answer_type_str = ""
             if unknown_node:
                 log.debug(f"syntax tree info, unknown node: {unknown_node.form}, unknown branch: {unknown_branch.form}")
                 log.debug(f"wh_leaf: {self.wh_leaf}")
@@ -180,6 +213,15 @@ class TreeToSparql(Component):
                 else:
                     log.debug(f"clause node not found")
                 modifiers, clause_modifiers = self.find_modifiers_of_unknown(unknown_node)
+                answer_type_nodes = [unknown_node] + modifiers
+                answer_type_nodes_with_ord = []
+                for node in answer_type_nodes:
+                    if not isinstance(node, str):
+                        answer_type_nodes_with_ord.append((node.form, node.ord))
+                answer_type_nodes = sorted(answer_type_nodes_with_ord, key=lambda x: x[1])
+                answer_type_tokens = [token for token, pos in answer_type_nodes if pos - 1 not in positions]
+                answer_type_str = " ".join(answer_type_tokens)
+                log.debug(f"answer_type_str {answer_type_str}")
                 modifiers_debug_list = []
                 for modifier in modifiers:
                     if isinstance(modifier, str):
@@ -246,14 +288,24 @@ class TreeToSparql(Component):
                 entities_dict_batch.append(entities_dict)
                 types_dict_batch.append(types_dict)
                 questions_batch.append(question)
-        return questions_batch, query_nums_batch, entities_dict_batch, types_dict_batch
+                if "в каком году" in question.lower() or "сколько лет" in question.lower() or "дата" in question.lower() or "дату" in question.lower():
+                    q_type_flag = "when"
+            q_type_flags_batch.append(q_type_flag)
+            answer_type_str_batch.append(answer_type_str)
+        return questions_batch, query_nums_batch, entities_dict_batch, types_dict_batch, q_type_flags_batch, answer_type_str_batch
 
     def find_root(self, tree: Node) -> Node:
         for node in tree.descendants:
             if node.deprel == "root" and node.children:
                 return node
+        for node in tree.descendants:
+            if node.parent.ord == 0:
+                return node
 
     def find_branch_with_unknown(self, root: Node) -> Tuple[str, str]:
+        q_type_flag = ""
+        q_type_pronouns = {"где": "where", "когда": "when", "кто": "who"}
+        
         self.wh_leaf = False
         self.one_chain = False
 
@@ -263,28 +315,52 @@ class TreeToSparql(Component):
             else:
                 for node in root.children:
                     if node.deprel == "nsubj":
-                        return node, node
+                        return node, node, q_type_flag
 
         if not self.one_chain:
             for node in root.children:
-                if node.form.lower() in self.q_pronouns:
+                node_word = node.form.lower()
+                if node_word in self.q_pronouns:
+                    if node_word in q_type_pronouns:
+                        q_type_flag = q_type_pronouns[node_word]
+                    if node_word == "как" and root.form.lower() in ["зовут", "звали"]:
+                        q_type_flag = "who"
                     if node.children:
                         for child in node.children:
                             if child.deprel in ["nmod", "obl"]:
-                                return child, node
+                                return child, node, q_type_flag
                     else:
                         self.wh_leaf = True
                 else:
                     for child in node.descendants:
                         if child.form.lower() in self.q_pronouns:
-                            return child.parent, node
+                            return child.parent, node, q_type_flag
 
         if self.wh_leaf or self.one_chain:
             for node in root.children:
-                if node.deprel in ["nsubj", "obl", "obj", "nmod", "xcomp"] and node.form.lower() not in self.q_pronouns:
-                    return node, node
+                if node.deprel in ["nsubj", "nsubj:pass", "obl", "obj", "nmod", "xcomp"] \
+                        and node.form.lower() not in self.q_pronouns:
+                    return node, node, q_type_flag
+                    
+        init_elem = root
+        init_ord = init_elem.ord
+        chain_length = 0
+        iter_num = 0
+        while True:
+            desc = [elem for elem in init_elem.children if elem.deprel != "punct"]
+            if len(desc) == 1 and desc[0].parent.ord == init_ord:
+                print(desc[0].form, desc[0].parent.form, desc[0].ord)
+                init_elem = desc[0]
+                init_ord = init_elem.ord
+                chain_length += 1
+            iter_num += 1
+            if iter_num >= 10:
+                break
+        if chain_length >= 3:
+            self.one_chain = True
+            return list(root.children)[0], list(root.children)[0], q_type_flag
 
-        return "", ""
+        return "", "", ""
 
     def find_modifiers_of_unknown(self, node: Node) -> Tuple[List[Union[str, Any]], list]:
         modifiers = []
@@ -480,6 +556,7 @@ class TreeToSparql(Component):
         log.debug(f"build_query: root_desc.keys, {root_desc_deprels}, positions {positions}")
         log.debug(f"temporal order {temporal_order}, ranking tokens {ranking_tokens}")
         if root_desc_deprels in [["nsubj", "obl"],
+                                 ["nsubj:pass", "obl"],
                                  ["nsubj", "obj"],
                                  ["nsubj", "xcomp"],
                                  ["obj", "xcomp"],
@@ -492,7 +569,8 @@ class TreeToSparql(Component):
                                  ["obl"],
                                  ["nmod"],
                                  ["xcomp"],
-                                 ["nsubj"]]:
+                                 ["nsubj"],
+                                 ["nsubj:pass"]]:
             if self.wh_leaf or self.one_chain:
                 if root_desc_deprels == ["nsubj", "obl"]:
                     grounded_entities_list = self.find_entities(root_desc["nsubj"][0], positions, cut_clause=True)
@@ -602,6 +680,10 @@ class TreeToSparql(Component):
         qualifiers_length = len(qualifier_entities_list)
         if qualifiers_length > 0 or modifiers_length or count:
             types_length = 0
+            
+        # experimental switch off types
+        types_length = 0
+        types = []
 
         if not temporal_order:
             for num, template in self.template_queries.items():

@@ -72,6 +72,24 @@ class TemplateMatcher(Serializable):
             Tuple[Union[List[str], list], list, Union[list, Any], Union[list, Any], Union[str, Any], Any, Union[
                 str, Any]]:
         question = question.lower()
+        if isinstance(self.templates, dict):
+            found_first = False
+            found_second = False
+            for first_word in self.templates:
+                if first_word != "else" and first_word in question:
+                    for second_word in self.templates[first_word]:
+                        if f"{first_word} {second_word}" in question:
+                            templates = self.templates[first_word][second_word]
+                            found_second = True
+                            break
+                    if not found_second:
+                        templates = self.templates[first_word]["else"]
+                    found_first = True
+                    break
+            if not found_first:
+                templates = self.templates["else"]
+        else:
+            templates = self.templates
         question = self.sanitize(question)
         question_length = len(question)
         entities, types, relations, relation_dirs = [], [], [], []
@@ -79,7 +97,8 @@ class TemplateMatcher(Serializable):
         template_found = ""
         entity_types = []
         template_answer = ""
-        results = self.pool.map(RegexpMatcher(question), self.templates)
+        answer_types = []
+        results = self.pool.map(RegexpMatcher(question), templates)
         results = functools.reduce(lambda x, y: x + y, results)
         replace_tokens = [("the uk", "united kingdom"), ("the us", "united states")]
         if results:
@@ -100,7 +119,8 @@ class TemplateMatcher(Serializable):
                 unuseful_tokens_len = sum([len(unuseful_tok) for unuseful_tok in unuseful_tokens])
                 log.debug(f"found template: {template}, {found_ent}")
                 match, entities_cand = self.match_template_and_ner(entities_cand, entities_from_ner, template_found)
-                if match and (0 not in entity_lengths or 0 not in type_lengths and entity_num_tokens):
+                ignore_ner = template.get("ignore_ner", False)
+                if (match or ignore_ner) and (0 not in entity_lengths or 0 not in type_lengths and entity_num_tokens):
                     cur_len = sum(entity_lengths) + sum(type_lengths)
                     log.debug(f"lengths: entity+type {cur_len}, question {question_length}, "
                               f"template {template_len}, unuseful tokens {unuseful_tokens_len}")
@@ -114,9 +134,11 @@ class TemplateMatcher(Serializable):
                         query_type = template["template_type"]
                         entity_types = template.get("entity_types", [])
                         template_answer = template.get("template_answer", "")
+                        answer_types = template.get("answer_types", [])
                         min_length = cur_len
 
-        return entities, types, relations, relation_dirs, query_type, entity_types, template_answer, template_found
+        return entities, types, relations, relation_dirs, query_type, entity_types, template_answer, answer_types, \
+                   template_found
 
     def sanitize(self, question: str) -> str:
         question = re.sub(r"^(a |the )", '', question)
