@@ -47,7 +47,7 @@
       "class": "logging.FileHandler",
       "level": "DEBUG",
       "formatter": "default",
-      "filename": "~/log.log"
+      "filename": "log.log"
     },
     "stdout": {
       "class": "logging.StreamHandler",
