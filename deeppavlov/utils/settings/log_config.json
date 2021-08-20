@@ -5,7 +5,8 @@
     "deeppavlov": {
       "level": "INFO",
       "handlers": [
-        "stderr"
+        "stderr",
+        "file"
       ],
       "propagate": true
     },
