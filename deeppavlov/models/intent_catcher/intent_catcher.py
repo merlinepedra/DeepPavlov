@@ -23,6 +23,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_hub as tfhub
 from overrides import overrides
+from tensorflow_core.python.keras.backend import set_session
 from xeger import Xeger
 
 from deeppavlov.core.common.registry import register
@@ -76,6 +77,12 @@ class IntentCatcher(NNModel):
         self.sentences = tf.placeholder(dtype=tf.string)
         self.embedded = embedder(self.sentences)
         mode = mode.lower().strip()
+
+        # https://github.com/tensorflow/tensorflow/issues/28287#issuecomment-519130227
+        # according to this issue, async/threaded backends must configure sessions prior to loading the model
+        log.info("Configuring session")
+        self.session = self._config_session()
+
         if mode == 'infer':
             self.load()
         elif mode == 'train':
@@ -84,8 +91,6 @@ class IntentCatcher(NNModel):
             self.classifier = self._config_nn(number_of_layers, multilabel, hidden_dim, number_of_intents)
         else:
             raise Exception(f"Provided mode `{mode}` is not supported!")
-        log.info("Configuring session")
-        self.session = self._config_session()
 
     @staticmethod
     def _config_session():
@@ -96,11 +101,17 @@ class IntentCatcher(NNModel):
             tensorflow.Session
         """
         config = tf.ConfigProto()
+        # from https://tfhub.dev/google/universal-sentence-encoder/2 (see Known issues)
+        # config.graph_options.rewrite_options.shape_optimization = 2
         config.gpu_options.allow_growth = True
         # config.gpu_options.visible_device_list = '0'
         session = tf.Session(config=config)
         session.run(tf.global_variables_initializer())
         session.run(tf.tables_initializer())
+
+        with session.graph.as_default():
+            set_session(session)
+
         return session
 
     def _config_nn(self, number_of_layers, multilabel, hidden_dim, number_of_intents) -> tf.keras.Model:
@@ -223,14 +234,15 @@ class IntentCatcher(NNModel):
         Returns:
             list of probabilities
         """
-        x_embedded = self.session.run(self.embedded, feed_dict={self.sentences:x})
-        probs = self.classifier.predict_proba(x_embedded)
-        _, num_labels = probs.shape
-        for i, s in enumerate(x):
-            for reg, l in self.regexps:
-                if reg.fullmatch(s):
-                    probs[i] = np.zeros(num_labels)
-                    probs[i, l] = 1.0
+        with self.session.graph.as_default():
+            x_embedded = self.session.run(self.embedded, feed_dict={self.sentences:x})
+            probs = self.classifier.predict_proba(x_embedded)
+            _, num_labels = probs.shape
+            for i, s in enumerate(x):
+                for reg, l in self.regexps:
+                    if reg.fullmatch(s):
+                        probs[i] = np.zeros(num_labels)
+                        probs[i, l] = 1.0
         return probs
 
     @overrides
@@ -254,7 +266,8 @@ class IntentCatcher(NNModel):
         Load classifier parameters and regexps from self.load_path.
         """
         log.info("Loading model {} and regexps from {}".format(self.__class__.__name__, self.save_path))
-        self.classifier = tf.keras.models.load_model(self.load_path / Path("nn.h5"))
+        with self.session.graph.as_default():
+            self.classifier = tf.keras.models.load_model(self.load_path / Path("nn.h5"))
         with open(self.load_path / Path('regexps.json')) as fp:
             self.regexps = json.load(fp)
         self.regexps = [(re.compile(d['regexp']), int(d['label'])) for d in self.regexps]
