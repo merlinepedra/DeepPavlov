@@ -1,0 +1,71 @@
+{
+  "dataset_reader": {
+    "class_name": "in_batch_ranking_reader",
+    "data_path": "{DOWNLOADS_PATH}/paragraph_ranking/paragraph_ranking_bienc.pickle",
+    "train_size": 170000,
+    "valid_size": 3000
+  },
+  "dataset_iterator": {
+    "class_name": "basic_classification_iterator"
+  },
+  "chainer": {
+    "in": ["samples"],
+    "in_y": ["positive_idx"],
+    "pipe": [
+      {
+        "in": ["samples"],
+        "out": ["texts_features", "descrs_features"],
+        "class_name": "torch_transformers_dual_batch_preprocessor",
+        "max_seq_length": 512,
+        "vocab_file": "{TRANSFORMER}"
+      },
+      {
+        "class_name": "torch_transformers_bienc_ranker_long",
+        "in": ["texts_features", "descrs_features"],
+        "in_y": ["positive_idx"],
+        "out": ["model_output"],
+        "save_path": "{MODEL_PATH}/model",
+        "load_path": "{MODEL_PATH}/model",
+        "question_encoder_save_path": "{MODEL_PATH}/question_encoder",
+        "context_encoder_save_path": "{MODEL_PATH}/context_encoder",
+        "model_name": "in_batch_bienc_long_ranking_model",
+        "pretrained_bert": "{TRANSFORMER}",
+        "learning_rate_drop_patience": 30,
+        "learning_rate_drop_div": 1.5
+      }
+    ],
+    "out": ["model_output"]
+  },
+  "train": {
+    "epochs": 50,
+    "batch_size": 10,
+    "train_metrics": ["acc"],
+    "metrics": ["acc"],
+    "validation_patience": 100,
+    "val_every_n_batches": 200,
+    "log_every_n_batches": 200,
+    "evaluation_targets": ["valid", "train"],
+    "show_examples": false,
+    "ranking_prepr": true,
+    "class_name": "torch_trainer"
+  },
+  "metadata": {
+    "variables": {
+      "ROOT_PATH": "/archive/evseev/.deeppavlov",
+      "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
+      "MODELS_PATH": "{ROOT_PATH}/models",
+      "TRANSFORMER": "DeepPavlov/rubert-base-cased",
+      "MODEL_PATH": "{MODELS_PATH}/paragraph_bienc_ranking_long_rus_n"
+      },
+    "download": [
+      {
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/odqa_retrieve/paragraph_ranking_bienc.tar.gz",
+        "subdir": "{DOWNLOADS_PATH}/paragraph_ranking"
+      },
+      {
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/odqa_retrieve/paragraph_bienc_ranking_long_rus.tar.gz",
+        "subdir": "{MODELS_PATH}/paragraph_bienc_ranking_long_rus"
+      }
+    ]
+  }
+}

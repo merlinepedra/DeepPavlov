@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import datetime
+import itertools
 import json
 import time
 from itertools import islice
@@ -103,10 +104,11 @@ class NNTrainer(FitTrainer):
                  validate_first: bool = True,
                  validation_patience: int = 5, val_every_n_epochs: int = -1, val_every_n_batches: int = -1,
                  log_every_n_batches: int = -1, log_every_n_epochs: int = -1, log_on_k_batches: int = 1,
+                 ranking_prepr: bool = False,
                  **kwargs) -> None:
         super().__init__(chainer_config, batch_size=batch_size, metrics=metrics, evaluation_targets=evaluation_targets,
                          show_examples=show_examples, tensorboard_log_dir=tensorboard_log_dir,
-                         max_test_batches=max_test_batches, **kwargs)
+                         max_test_batches=max_test_batches, ranking_prepr=ranking_prepr, **kwargs)
         if train_metrics is None:
             self.train_metrics = self.metrics
         else:
@@ -145,6 +147,7 @@ class NNTrainer(FitTrainer):
         self.last_result = {}
         self.losses = []
         self.start_time: Optional[float] = None
+        self.ranking_prepr = ranking_prepr
 
         if self.tensorboard_log_dir is not None:
             self.tb_train_writer = self._tf.summary.FileWriter(str(self.tensorboard_log_dir / 'train_log'))
@@ -195,21 +198,29 @@ class NNTrainer(FitTrainer):
                 self.patience += 1
 
         # Run the validation model-saving logic
+        out = open("train_log.txt", 'a')
         if self._is_initial_validation():
             log.info('Initial best {} of {}'.format(m_name, score))
+            out.write(f"Initial best {m_name} of {score}"+'\n')
             self.score_best = score
         elif self._is_first_validation() and self.score_best is None:
             log.info('First best {} of {}'.format(m_name, score))
+            out.write(f"First best {m_name} of {score}"+'\n')
             self.score_best = score
             log.info('Saving model')
+            out.write("Saving model"+'\n')
             self.save()
         elif self.improved(score, self.score_best):
             log.info('Improved best {} of {}'.format(m_name, score))
+            out.write(f"Improved best {m_name} of {score}"+'\n')
             self.score_best = score
             log.info('Saving model')
+            out.write("Saving model"+'\n')
             self.save()
         else:
             log.info('Did not improve on the {} of {}'.format(m_name, self.score_best))
+            out.write(f"Did not improve on the {m_name} of {self.score_best}"+'\n')
+        out.close()
 
         report['impatience'] = self.patience
         if self.validation_patience > 0:
@@ -218,6 +229,9 @@ class NNTrainer(FitTrainer):
         self._send_event(event_name='after_validation', data=report)
         report = {'valid': report}
         print(json.dumps(report, ensure_ascii=False, cls=NumpyArrayEncoder))
+        out = open("train_log.txt", 'a')
+        out.write(str(report)+'\n')
+        out.close()
         self.validation_number += 1
 
     def _log(self, iterator: DataLearningIterator,
@@ -228,7 +242,9 @@ class NNTrainer(FitTrainer):
                 'time_spent': str(datetime.timedelta(seconds=round(time.time() - self.start_time + 0.5)))
             }
         else:
-            data = islice(iterator.gen_batches(self.batch_size, data_type='train', shuffle=True),
+            #data = islice(iterator.gen_batches(self.batch_size, data_type='train', shuffle=True),
+            #              self.log_on_k_batches)
+            data = islice(iterator.gen_batches(self.batch_size, data_type='train', shuffle=False),
                           self.log_on_k_batches)
             report = self.test(data, self.train_metrics, start_time=self.start_time)
 
@@ -258,6 +274,9 @@ class NNTrainer(FitTrainer):
 
         report = {'train': report}
         print(json.dumps(report, ensure_ascii=False, cls=NumpyArrayEncoder))
+        out = open("train_log.txt", 'a')
+        out.write(str(report)+'\n')
+        out.close()
 
     def _send_event(self, event_name: str, data: Optional[dict] = None) -> None:
         report = {
@@ -269,6 +288,45 @@ class NNTrainer(FitTrainer):
         if data is not None:
             report.update(data)
         self._chainer.process_event(event_name=event_name, data=report)
+        
+    def process_sample(self, x, y_true):
+        neg_samples_list = [sample[1][1:] for sample in x]
+        new_x = []
+        positive_idx_batch = []
+        contexts_batch = []
+        for n, (question, cur_contexts) in enumerate(x):
+            pos_context = cur_contexts[0]
+            neg_contexts = cur_contexts[1:]
+            if n == 0:
+                other_neg_contexts = neg_samples_list[n+1:]
+            elif n == len(x) - 1:
+                other_neg_contexts = neg_samples_list[:n]
+            else:
+                other_neg_contexts = neg_samples_list[:n] + neg_samples_list[n+1:]
+            other_neg_contexts = set(itertools.chain.from_iterable(other_neg_contexts))
+            new_neg_contexts = [elem for elem in neg_contexts if elem not in other_neg_contexts][:4]
+            neg_samples_list[n] = new_neg_contexts
+            all_contexts = [pos_context] + new_neg_contexts
+            new_x.append((question, all_contexts))
+            contexts_batch.append(all_contexts)
+        contexts_len_list = [len(all_contexts) for all_contexts in contexts_batch]
+        for i in range(len(contexts_len_list)):
+            if i == 0:
+                positive_idx_batch.append(i)
+            else:
+                positive_idx_batch.append(sum(contexts_len_list[:i]))
+
+        return new_x, positive_idx_batch
+    
+    def process_sample_new(self, x, y_true):
+        batch_size = len(x)
+        num_contexts = len(x[0])
+        total_contexts = batch_size * num_contexts
+        new_y_true = []
+        for ii in range(batch_size):
+            new_y_true.append(ii*total_contexts)
+
+        return new_y_true
 
     def train_on_batches(self, iterator: DataLearningIterator) -> None:
         """Train pipeline on batches using provided data iterator and initialization parameters"""
@@ -280,6 +338,8 @@ class NNTrainer(FitTrainer):
             impatient = False
             self._send_event(event_name='before_train')
             for x, y_true in iterator.gen_batches(self.batch_size, data_type='train'):
+                if self.ranking_prepr:
+                    x, y_true = self.process_sample(x, y_true)
                 self.last_result = self._chainer.train_on_batch(x, y_true)
                 if self.last_result is None:
                     self.last_result = {}

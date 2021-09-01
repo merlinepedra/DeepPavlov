@@ -72,7 +72,10 @@ class TorchModel(NNModel):
                  min_learning_rate: float = 0.,
                  *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.device = torch.device("cuda" if torch.cuda.is_available() and device == "gpu" else "cpu")
+        if isinstance(device, str) and device.startswith("cuda"):
+            self.device = device
+        else:
+            self.device = torch.device("cuda" if torch.cuda.is_available() and device == "gpu" else "cpu")
         self.model = None
         self.optimizer = None
         self.lr_scheduler = None

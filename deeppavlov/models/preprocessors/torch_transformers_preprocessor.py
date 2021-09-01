@@ -17,9 +17,9 @@ import random
 from logging import getLogger
 from pathlib import Path
 import torch
-from typing import Tuple, List, Optional, Union, Dict
+from typing import Tuple, List, Optional, Union
 
-from transformers import AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer, AutoModel, BertModel, BertTokenizer
 from transformers.data.processors.utils import InputFeatures
 
 from deeppavlov.core.commands.utils import expand_path
@@ -29,88 +29,6 @@ from deeppavlov.core.models.component import Component
 from deeppavlov.models.preprocessors.mask import Mask
 
 log = getLogger(__name__)
-
-
-@register('torch_transformers_multiplechoice_preprocessor')
-class TorchTransformersMultiplechoicePreprocessor(Component):
-    """Tokenize text on subtokens, encode subtokens with their indices, create tokens and segment masks.
-
-    Check details in :func:`bert_dp.preprocessing.convert_examples_to_features` function.
-
-    Args:
-        vocab_file: path to vocabulary
-        do_lower_case: set True if lowercasing is needed
-        max_seq_length: max sequence length in subtokens, including [SEP] and [CLS] tokens
-        return_tokens: whether to return tuple of input features and tokens, or only input features
-
-    Attributes:
-        max_seq_length: max sequence length in subtokens, including [SEP] and [CLS] tokens
-        return_tokens: whether to return tuple of input features and tokens, or only input features
-        tokenizer: instance of Bert FullTokenizer
-
-    """
-
-    def __init__(self,
-                 vocab_file: str,
-                 do_lower_case: bool = True,
-                 max_seq_length: int = 512,
-                 return_tokens: bool = False,
-                 **kwargs) -> None:
-        self.max_seq_length = max_seq_length
-        self.return_tokens = return_tokens
-        if Path(vocab_file).is_file():
-            vocab_file = str(expand_path(vocab_file))
-            self.tokenizer = AutoTokenizer(vocab_file=vocab_file,
-                                           do_lower_case=do_lower_case)
-        else:
-            self.tokenizer = AutoTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
-
-    def tokenize_mc_examples(self,
-                             contexts: List[List[str]],
-                             choices: List[List[str]]) -> Dict[str, torch.tensor]:
-
-        num_choices = len(contexts[0])
-        batch_size = len(contexts)
-
-        # tokenize examples in groups of `num_choices`
-        examples = []
-        for context_list, choice_list in zip(contexts, choices):
-            for context, choice in zip(context_list, choice_list):
-                tokenized_input = self.tokenizer.encode_plus(text=context,
-                                                             text_pair=choice,
-                                                             return_attention_mask=True,
-                                                             add_special_tokens=True,
-                                                             truncation=True)
-
-                examples.append(tokenized_input)
-
-        padded_examples = self.tokenizer.pad(
-            examples,
-            padding=True,
-            max_length=self.max_seq_length,
-            return_tensors='pt',
-        )
-
-        padded_examples = {k: v.view(batch_size, num_choices, -1) for k, v in padded_examples.items()}
-
-        return padded_examples
-
-    def __call__(self, texts_a: List[List[str]], texts_b: List[List[str]] = None) -> Dict[str, torch.tensor]:
-        """Tokenize and create masks.
-
-        texts_a and texts_b are separated by [SEP] token
-
-        Args:
-            texts_a: list of texts,
-            texts_b: list of texts, it could be None, e.g. single sentence classification task
-
-        Returns:
-            batch of :class:`transformers.data.processors.utils.InputFeatures` with subtokens, subtoken ids, \
-                subtoken mask, segment mask, or tuple of batch of InputFeatures and Batch of subtokens
-        """
-
-        input_features = self.tokenize_mc_examples(texts_a, texts_b)
-        return input_features
 
 
 @register('torch_transformers_preprocessor')
@@ -123,11 +41,11 @@ class TorchTransformersPreprocessor(Component):
         vocab_file: path to vocabulary
         do_lower_case: set True if lowercasing is needed
         max_seq_length: max sequence length in subtokens, including [SEP] and [CLS] tokens
-        return_tokens: whether to return tuple of input features and tokens, or only input features
+        return_tokens: whether to return tuple of inputfeatures and tokens, or only inputfeatures
 
     Attributes:
         max_seq_length: max sequence length in subtokens, including [SEP] and [CLS] tokens
-        return_tokens: whether to return tuple of input features and tokens, or only input features
+        return_tokens: whether to return tuple of inputfeatures and tokens, or only inputfeatures
         tokenizer: instance of Bert FullTokenizer
 
     """
@@ -137,6 +55,7 @@ class TorchTransformersPreprocessor(Component):
                  do_lower_case: bool = True,
                  max_seq_length: int = 512,
                  return_tokens: bool = False,
+                 add_special_tokens: List = None,
                  **kwargs) -> None:
         self.max_seq_length = max_seq_length
         self.return_tokens = return_tokens
@@ -146,77 +65,12 @@ class TorchTransformersPreprocessor(Component):
                                            do_lower_case=do_lower_case)
         else:
             self.tokenizer = AutoTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
+        if add_special_tokens is not None:
+            special_tokens_dict = {'additional_special_tokens': add_special_tokens}
+            num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
 
-    def __call__(self, texts_a: List[str], texts_b: Optional[List[str]] = None) -> Union[List[InputFeatures],
-                                                                                         Tuple[List[InputFeatures],
-                                                                                               List[List[str]]]]:
-        """Tokenize and create masks.
-
-        texts_a and texts_b are separated by [SEP] token
-
-        Args:
-            texts_a: list of texts,
-            texts_b: list of texts, it could be None, e.g. single sentence classification task
-
-        Returns:
-            batch of :class:`transformers.data.processors.utils.InputFeatures` with subtokens, subtoken ids, \
-                subtoken mask, segment mask, or tuple of batch of InputFeatures and Batch of subtokens
-        """
-
-        # in case of iterator's strange behaviour
-        if isinstance(texts_a, tuple):
-            texts_a = list(texts_a)
-
-        input_features = self.tokenizer(text=texts_a,
-                                        text_pair=texts_b,
-                                        add_special_tokens=True,
-                                        max_length=self.max_seq_length,
-                                        padding='max_length',
-                                        return_attention_mask=True,
-                                        truncation=True,
-                                        return_tensors='pt')
-        return input_features
-
-
-@register('torch_squad_transformers_preprocessor')
-class TorchSquadTransformersPreprocessor(Component):
-    """Tokenize text on subtokens, encode subtokens with their indices, create tokens and segment masks.
-
-    Check details in :func:`bert_dp.preprocessing.convert_examples_to_features` function.
-
-    Args:
-        vocab_file: path to vocabulary
-        do_lower_case: set True if lowercasing is needed
-        max_seq_length: max sequence length in subtokens, including [SEP] and [CLS] tokens
-        return_tokens: whether to return tuple of input features and tokens, or only input features
-
-    Attributes:
-        max_seq_length: max sequence length in subtokens, including [SEP] and [CLS] tokens
-        return_tokens: whether to return tuple of input features and tokens, or only input features
-        tokenizer: instance of Bert FullTokenizer
-
-    """
-
-    def __init__(self,
-                 vocab_file: str,
-                 do_lower_case: bool = True,
-                 max_seq_length: int = 512,
-                 return_tokens: bool = False, 
-                 add_token_type_ids: bool = False, 
-                 **kwargs) -> None:
-        self.max_seq_length = max_seq_length
-        self.return_tokens = return_tokens
-        self.add_token_type_ids = add_token_type_ids
-        if Path(vocab_file).is_file():
-            vocab_file = str(expand_path(vocab_file))
-            self.tokenizer = AutoTokenizer(vocab_file=vocab_file,
-                                           do_lower_case=do_lower_case)
-        else:
-            self.tokenizer = AutoTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
-
-    def __call__(self, texts_a: List[str], texts_b: Optional[List[str]] = None) -> Union[List[InputFeatures],
-                                                                                         Tuple[List[InputFeatures],
-                                                                                               List[List[str]]]]:
+    def __call__(self, texts_a: List[str], texts_b: Optional[List[str]] = None) -> Union[
+            List[InputFeatures], Tuple[List[InputFeatures], List[List[str]]]]:
         """Tokenize and create masks.
 
         texts_a and texts_b are separated by [SEP] token
@@ -234,28 +88,14 @@ class TorchSquadTransformersPreprocessor(Component):
             texts_b = [None] * len(texts_a)
 
         input_features = []
-        tokens = [] 
+        tokens = []
         for text_a, text_b in zip(texts_a, texts_b):
             encoded_dict = self.tokenizer.encode_plus(
-                text=text_a, text_pair=text_b, 
-                add_special_tokens=True, 
-                max_length=self.max_seq_length,
-                truncation=True,
-                padding='max_length',
-                return_attention_mask=True, 
-                return_tensors='pt')
+                text=text_a, text_pair=text_b, add_special_tokens=True, max_length=self.max_seq_length,
+                pad_to_max_length=True, return_attention_mask=True, return_tensors='pt')
 
             if 'token_type_ids' not in encoded_dict:
-                if self.add_token_type_ids:
-                    input_ids = encoded_dict['input_ids']
-                    seq_len = input_ids.size(1)
-                    sep = torch.where(input_ids == self.tokenizer.sep_token_id)[1][0].item()
-                    len_a = min(sep + 1, seq_len)
-                    len_b = seq_len - len_a
-                    encoded_dict['token_type_ids'] = torch.cat((torch.zeros(1, len_a, dtype=int), 
-                                                                torch.ones(1, len_b, dtype=int)), dim=1)
-                else:
-                    encoded_dict['token_type_ids'] = torch.tensor([0])
+                encoded_dict['token_type_ids'] = torch.tensor([0])
 
             curr_features = InputFeatures(input_ids=encoded_dict['input_ids'],
                                           attention_mask=encoded_dict['attention_mask'],
@@ -271,9 +111,149 @@ class TorchSquadTransformersPreprocessor(Component):
             return input_features
 
 
+@register('torch_transformers_batch_preprocessor')
+class TorchTransformersBatchPreprocessor(Component):
+
+    def __init__(self,
+                 vocab_file: str,
+                 do_lower_case: bool = False,
+                 max_seq_length: int = 512,
+                 return_tokens: bool = False,
+                 add_special_tokens: List = None,
+                 special_token_id: int = None,
+                 return_special_tokens_pos: bool = False,
+                 **kwargs) -> None:
+        self.max_seq_length = max_seq_length
+        self.return_tokens = return_tokens
+        #vocab_file = str(expand_path(vocab_file))
+        if Path(vocab_file).is_file():
+            self.tokenizer = BertTokenizer(vocab_file=vocab_file,
+                                           do_lower_case=do_lower_case)
+        else:
+            self.tokenizer = BertTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
+        if add_special_tokens is not None:
+            special_tokens_dict = {'additional_special_tokens': add_special_tokens}
+            num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
+        self.add_special_tokens = add_special_tokens
+        self.special_token_id = special_token_id
+        self.return_special_tokens_pos = return_special_tokens_pos
+        self.re_tokenizer = re.compile(r"[\w']+|[^\w ]")
+
+    def __call__(self, texts_a: List[str], texts_b: List[str] = None) -> List[InputFeatures]:
+        if texts_b is None:
+            texts_b = [None for _ in texts_a]
+        texts_input_features = []
+        special_tokens_pos = []
+        
+        tokenizer_input = [[text_a, text_b] for text_a, text_b in zip(texts_a, texts_b)]
+        encoding = self.tokenizer.batch_encode_plus(
+            tokenizer_input, add_special_tokens = True, pad_to_max_length=True,
+            return_attention_mask = True)
+        input_ids_batch = encoding["input_ids"]
+        attention_mask_batch = encoding["attention_mask"]
+        token_type_ids_batch = encoding["token_type_ids"]
+        
+        for input_ids_list in input_ids_batch:
+            found_n = -1
+            for n, input_id in enumerate(input_ids_list):
+                if input_id == self.special_token_id:
+                    found_n = n
+                    break
+            if found_n == -1:
+                found_n = 0
+            special_tokens_pos.append(found_n)
+
+        for input_ids, attention_mask, token_type_ids in \
+                zip(input_ids_batch, attention_mask_batch, token_type_ids_batch):
+            curr_features = InputFeatures(input_ids=input_ids,
+                                          attention_mask=attention_mask,
+                                          token_type_ids=token_type_ids)
+            texts_input_features.append(curr_features)
+
+        if self.return_special_tokens_pos:
+            return texts_input_features, special_tokens_pos
+        else:
+            return texts_input_features
+
+
+@register('torch_transformers_dual_batch_preprocessor')
+class TorchTransformersDualBatchPreprocessor(Component):
+
+    def __init__(self,
+                 vocab_file: str,
+                 do_lower_case: bool = True,
+                 max_seq_length: int = 512,
+                 return_tokens: bool = False,
+                 add_special_tokens: List = None,
+                 **kwargs) -> None:
+        self.max_seq_length = max_seq_length
+        self.return_tokens = return_tokens
+        if Path(vocab_file).is_file():
+            vocab_file = str(expand_path(vocab_file))
+            self.tokenizer = AutoTokenizer(vocab_file=vocab_file,
+                                           do_lower_case=do_lower_case)
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
+        if add_special_tokens is not None:
+            special_tokens_dict = {'additional_special_tokens': add_special_tokens}
+            num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
+
+    def __call__(self, samples: Tuple[List[str], List[List[str]]]) -> List[InputFeatures]:
+        questions, contexts_batch = zip(*samples)
+        questions_input_features = []
+        
+        tokenizer_input = [[text_a, None] for text_a in questions]
+        encoding = self.tokenizer.batch_encode_plus(
+            tokenizer_input, add_special_tokens = True, pad_to_max_length=True,
+            return_attention_mask = True)
+        input_ids_batch = encoding["input_ids"]
+        attention_mask_batch = encoding["attention_mask"]
+        token_type_ids_batch = encoding["token_type_ids"]
+        input_ids_batch = [elem[:490] for elem in input_ids_batch]
+        attention_mask_batch = [elem[:490] for elem in attention_mask_batch]
+        token_type_ids_batch = [elem[:490] for elem in token_type_ids_batch]
+        for input_ids, attention_mask, token_type_ids in zip(input_ids_batch, attention_mask_batch, token_type_ids_batch):
+            questions_input_features.append({"input_ids": input_ids, "attention_mask": attention_mask,
+                                             "token_type_ids": token_type_ids})
+        contexts_input_features_batch = []
+        tokenizer_input = []
+        for contexts in contexts_batch:
+            for context in contexts:
+                if isinstance(context, str):
+                    tokenizer_input.append([context, None])
+                elif isinstance(context, list):
+                    tokenizer_input.append(context)
+                elif isinstance(context, tuple):
+                    tokenizer_input.append(list(context))
+        
+        contexts_len = [len(contexts) for contexts in contexts_batch]
+        encoding = self.tokenizer.batch_encode_plus(
+            tokenizer_input, add_special_tokens = True, pad_to_max_length=True,
+            return_attention_mask = True)
+        input_ids_batch = encoding["input_ids"]
+        attention_mask_batch = encoding["attention_mask"]
+        token_type_ids_batch = encoding["token_type_ids"]
+        input_ids_batch = [elem[:490] for elem in input_ids_batch]
+        attention_mask_batch = [elem[:490] for elem in attention_mask_batch]
+        token_type_ids_batch = [elem[:490] for elem in token_type_ids_batch]
+        
+        cnt = 0
+        for i in range(len(contexts_batch)):
+            contexts_input_features = []
+            for j in range(contexts_len[i]):
+                contexts_input_features.append({"input_ids": input_ids_batch[cnt],
+                                                "attention_mask": attention_mask_batch[cnt],
+                                                "token_type_ids": token_type_ids_batch[cnt]})
+                cnt += 1
+            contexts_input_features_batch.append(contexts_input_features)
+
+        return questions_input_features, contexts_input_features_batch
+
+
 @register('torch_transformers_ner_preprocessor')
 class TorchTransformersNerPreprocessor(Component):
-    """Takes tokens and splits them into bert subtokens, encodes subtokens with their indices.
+    """
+    Takes tokens and splits them into bert subtokens, encodes subtokens with their indices.
     Creates a mask of subtokens (one for the first subtoken, zero for the others).
 
     If tags are provided, calculates tags for subtokens.
@@ -315,15 +295,26 @@ class TorchTransformersNerPreprocessor(Component):
             self.tokenizer = AutoTokenizer(vocab_file=vocab_file,
                                            do_lower_case=do_lower_case)
         else:
-            self.tokenizer = AutoTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
+            self.tokenizer = AutoTokenizer.from_pretrained(vocab_file, do_lower_case=True)
         self.token_masking_prob = token_masking_prob
 
     def __call__(self,
                  tokens: Union[List[List[str]], List[str]],
                  tags: List[List[str]] = None,
                  **kwargs):
+        tokens_offsets_batch = [[] for _ in tokens]
         if isinstance(tokens[0], str):
-            tokens = [re.findall(self._re_tokenizer, s) for s in tokens]
+            tokens_batch = []
+            tokens_offsets_batch = []
+            for s in tokens:
+                tokens_list = []
+                tokens_offsets_list = []
+                for elem in re.finditer(self._re_tokenizer, s):
+                    tokens_list.append(elem[0])
+                    tokens_offsets_list.append((elem.start(), elem.end()))
+                tokens_batch.append(tokens_list)
+                tokens_offsets_batch.append(tokens_offsets_list)
+            tokens = tokens_batch
         subword_tokens, subword_tok_ids, startofword_markers, subword_tags = [], [], [], []
         for i in range(len(tokens)):
             toks = tokens[i]
@@ -373,7 +364,7 @@ class TorchTransformersNerPreprocessor(Component):
                         log.warning(f'Tags len: {len(ts)}\n Tags: {ts}')
                 return tokens, subword_tokens, subword_tok_ids, \
                        attention_mask, startofword_markers, nonmasked_tags
-        return tokens, subword_tokens, subword_tok_ids, startofword_markers, attention_mask
+        return tokens, subword_tokens, subword_tok_ids, startofword_markers, attention_mask, tokens_offsets_batch
 
     @staticmethod
     def _ner_bert_tokenize(tokens: List[str],
