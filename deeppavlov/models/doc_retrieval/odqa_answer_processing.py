@@ -78,6 +78,7 @@ class ODQAanswerProcessor:
             full_match = []
             for answer, context in zip(answers, answer_contexts):
                 context_sentences = ru_sent_tokenize(context)
+                context_sentences = [sent for sent in context_sentences if len(sent) > 1]
                 context_sent_syntax_info = self.syntax_parser(context_sentences)
                 for syntax_info in context_sent_syntax_info:
                     c_adj, c_noun, c_place = self.parse_syntax_tree(syntax_info)
