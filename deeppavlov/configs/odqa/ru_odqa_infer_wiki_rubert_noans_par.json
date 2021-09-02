@@ -45,7 +45,7 @@
       },
       {
         "class_name": "filter_docs",
-        "top_n": 400,
+        "top_n": 200,
         "in": ["question_raw", "tfidf_doc_ids", "tfidf_doc_text"],
         "out": ["filtered_doc_ids", "filtered_doc_text"]
       },

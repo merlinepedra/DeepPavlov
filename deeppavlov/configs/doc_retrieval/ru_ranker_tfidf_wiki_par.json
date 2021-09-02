@@ -36,7 +36,7 @@
       },
       {
         "class_name": "tfidf_ranker",
-        "top_n": 10000,
+        "top_n": 1000,
         "in": ["docs", "entity_substr", "tags"],
         "out": [
           "tfidf_doc_ids",

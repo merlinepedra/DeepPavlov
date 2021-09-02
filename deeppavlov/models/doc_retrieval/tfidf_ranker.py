@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+import time
 from logging import getLogger
 from typing import List, Any, Tuple
 
 import numpy as np
+import pymorphy2
 
 from deeppavlov.core.common.registry import register
 from deeppavlov.core.models.estimator import Component
@@ -43,13 +46,19 @@ class TfidfRanker(Component):
 
     """
 
-    def __init__(self, vectorizer: HashingTfIdfVectorizer, top_n=5, active: bool = True, **kwargs):
+    def __init__(self, vectorizer: HashingTfIdfVectorizer, top_n=5, active: bool = True,
+                       filter_flag: bool = False, **kwargs):
 
         self.top_n = top_n
         self.vectorizer = vectorizer
         self.active = active
+        self.re_tokenizer = re.compile(r"[\w']+|[^\w ]")
+        self.lemmatizer = pymorphy2.MorphAnalyzer()
+        self.filter_flag = filter_flag
 
-    def __call__(self, questions: List[str]) -> Tuple[List[Any], List[float]]:
+    def __call__(self, questions: List[str],
+                       entity_substr_batch: List[List[str]] = None,
+                       tags_batch: List[List[str]] = None) -> Tuple[List[Any], List[float]]:
         """Rank documents and return top n document titles with scores.
 
         Args:
@@ -59,11 +68,35 @@ class TfidfRanker(Component):
             a tuple of selected doc ids and their scores
         """
 
+        tm_st = time.time()
         batch_doc_ids, batch_docs_scores = [], []
 
         q_tfidfs = self.vectorizer(questions)
+        entity_substr_batch = [[] for _ in questions]
+        tags_batch = [[] for _ in questions]
 
-        for q_tfidf in q_tfidfs:
+        for question, q_tfidf, entity_substr_list, tags_list in \
+                zip(questions, q_tfidfs, entity_substr_batch, tags_batch):
+            if self.filter_flag:
+                entity_substr_for_search = []
+                for entity_substr, tag in zip(entity_substr_list, tags_list):
+                    if tag in {"PERSON", "PRODUCT", "WORK_OF_ART"}:
+                        entity_substr_for_search.append(entity_substr)
+                if not entity_substr_for_search:
+                    question_tokens = re.findall(self.re_tokenizer, question)
+                    for question_token in question_tokens:
+                        if self.lemmatizer.parse(question_token)[0].tag.POS == "NOUN" \
+                                and self.lemmatizer.parse(question_token)[0].normal_form not in {"мир", "земля", "планета", "человек"}:
+                            entity_substr_for_search.append(question_token)
+                
+                nonzero_scores = set()
+                
+                if entity_substr_for_search:
+                    ent_tfidf = self.vectorizer([", ".join(entity_substr_for_search)])[0]
+                    ent_scores = ent_tfidf * self.vectorizer.tfidf_matrix
+                    ent_scores = np.squeeze(ent_scores.toarray())
+                    nonzero_scores = set(np.nonzero(ent_scores)[0])
+        
             scores = q_tfidf * self.vectorizer.tfidf_matrix
             scores = np.squeeze(
                 scores.toarray() + 0.0001)  # add a small value to eliminate zero scores
@@ -78,10 +111,16 @@ class TfidfRanker(Component):
             else:
                 o = np.argpartition(-scores, thresh)[0:thresh]
             o_sort = o[np.argsort(-scores[o])]
+            
+            if self.filter_flag and nonzero_scores:
+                o_sort = np.array([elem for elem in o_sort if elem in nonzero_scores])
 
             doc_scores = scores[o_sort]
-            doc_ids = [self.vectorizer.index2doc[i] for i in o_sort]
+            doc_ids = [self.vectorizer.index2doc.get(i, "") for i in o_sort]
+            
             batch_doc_ids.append(doc_ids)
             batch_docs_scores.append(doc_scores)
+        tm_end = time.time()
+        logger.debug(f"tfidf time, {tm_end - tm_st}")
 
         return batch_doc_ids, batch_docs_scores

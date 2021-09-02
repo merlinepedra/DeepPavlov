@@ -61,9 +61,9 @@ class ODQAanswerProcessor:
             answer_counts = sorted(answer_counts, key=lambda x: (x[1][0], x[1][1]), reverse=True)
             selected_answers.append(answer_counts[0][1][2])
             if answer_counts[0][1][0] >= 2:
-                selected_answers_conf.append("HIGH_CONF")
+                selected_answers_conf.append(1.0)
             else:
-                selected_answers_conf.append(answer_counts[0][1][3])
+                selected_answers_conf.append(answer_counts[0][1][3] * 0.95)
             logger.info(f"answer_counts {answer_counts}")
         return selected_answers, selected_answers_conf
     
@@ -190,7 +190,7 @@ class FilterDocs:
                 place_tokens = [tok for tok in place_tokens if len(tok) > 2]
                 lemm_place = [self.lemmatizer.parse(tok)[0].normal_form for tok in place_tokens]
                 lemm_places.append(" ".join(lemm_place))
-            print("lemm_places", lemm_places)
+            
             for doc in docs:
                 doc_tokens = re.findall(self.re_tokenizer, doc)
                 doc_tokens = [tok for tok in doc_tokens if len(tok) > 2]
