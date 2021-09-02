@@ -266,7 +266,6 @@ class NerChunkModel(Component):
                     ner_tokens, entity_positions, sentences_tokens in \
                     zip(entity_substr_batch, tags_batch, probas_batch, entity_offsets_batch, sentences_offsets_batch,
                         sentences_batch, text_len_batch, nums_batch, ner_tokens_batch, entity_positions_batch, sentences_tokens_batch):
-                print("entity_positions", entity_positions)
                 if doc_num == cur_doc_num:
                     doc_entity_substr += entity_substr
                     doc_tags += tag

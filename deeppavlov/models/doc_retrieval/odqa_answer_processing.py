@@ -56,7 +56,10 @@ class ODQAanswerProcessor:
                     answer_tokens = [self.lemmatizer.parse(tok)[0].normal_form for tok in answer_tokens]
                     answer_lemm = " ".join(answer_tokens).lower()
                 prev_counts = answer_counts.get(answer_lemm, (0, 0, ""))
-                answer_counts[answer_lemm] = (prev_counts[0] + 1, prev_counts[1] + (len(answers) - n), answer, score)
+                if answer:
+                    answer_counts[answer_lemm] = (prev_counts[0] + 1, prev_counts[1] + (len(answers) - n), answer, score)
+                else:
+                    answer_counts[answer_lemm] = (1, prev_counts[1] + (len(answers) - n), answer, score)
             answer_counts = list(answer_counts.items())
             answer_counts = sorted(answer_counts, key=lambda x: (x[1][0], x[1][1]), reverse=True)
             selected_answers.append(answer_counts[0][1][2])
