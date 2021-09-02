@@ -59,7 +59,7 @@
         "batch_size": 10000,
         "squad_model": {"config_path": "{CONFIGS_PATH}/squad/multi_squad_ru_retr_noans_rubert_infer.json"},
         "sort_noans": true,
-        "top_n": 10,
+        "top_n": 100,
         "return_answer_sentence": true,
         "in": [
           "filtered_doc_text",
@@ -87,7 +87,7 @@
   },
   "metadata": {
     "variables": {
-      "ROOT_PATH": "~/.deeppavlov",
+      "ROOT_PATH": "/archive/evseev/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
       "CONFIGS_PATH": "{DEEPPAVLOV_PATH}/configs",
