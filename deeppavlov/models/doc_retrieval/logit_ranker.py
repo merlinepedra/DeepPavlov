@@ -121,7 +121,7 @@ class LogitRanker(Component):
             batch_best_answers_sentences = [x[0] for x in batch_best_answers_sentences]
             batch_best_answers_contexts = [x[0] for x in batch_best_answers_contexts]
         tm_end = time.time()
-        log.debug(f"--------------------- logit ranking time, {tm_end - tm_st}")
+        logger.debug(f"--------------------- logit ranking time, {tm_end - tm_st}")
 
         if doc_ids_batch is None:
             if self.return_answer_sentence:
