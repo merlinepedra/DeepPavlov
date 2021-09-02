@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
 from logging import getLogger
 from operator import itemgetter
 from typing import List, Union, Tuple, Optional
@@ -74,11 +75,13 @@ class LogitRanker(Component):
             logger.warning("you didn't pass tfidf_doc_ids as input in logit_ranker config so "
                            "batch_best_answers_doc_ids can't be compute")
 
+        tm_st = time.time()
         batch_best_answers = []
         batch_best_answers_score = []
         batch_best_answers_place = []
         batch_best_answers_doc_ids = []
         batch_best_answers_sentences = []
+        batch_best_answers_contexts = []
         for quest_ind, [contexts, questions] in enumerate(zip(contexts_batch, questions_batch)):
             results = []
             for i in range(0, len(contexts), self.batch_size):
@@ -101,7 +104,9 @@ class LogitRanker(Component):
             for answer, place, context in zip(best_answers, best_answers_place, best_answers_contexts):
                 sentence = find_answer_sentence(place, context)
                 best_answers_sentences.append(sentence)
+                best_answers_contexts.append(context)
             batch_best_answers_sentences.append(best_answers_sentences)
+            batch_best_answers_contexts.append(best_answers_contexts)
 
             if doc_ids_batch is not None:
                 doc_ind = [results.index(x) for x in results_sort]
@@ -114,6 +119,9 @@ class LogitRanker(Component):
             batch_best_answers_score = [x[0] for x in batch_best_answers_score]
             batch_best_answers_doc_ids = [x[0] for x in batch_best_answers_doc_ids]
             batch_best_answers_sentences = [x[0] for x in batch_best_answers_sentences]
+            batch_best_answers_contexts = [x[0] for x in batch_best_answers_contexts]
+        tm_end = time.time()
+        log.debug(f"--------------------- logit ranking time, {tm_end - tm_st}")
 
         if doc_ids_batch is None:
             if self.return_answer_sentence:
@@ -123,5 +131,5 @@ class LogitRanker(Component):
 
         if self.return_answer_sentence:
             return batch_best_answers, batch_best_answers_score, batch_best_answers_place, batch_best_answers_doc_ids, \
-                   batch_best_answers_sentences
+                   batch_best_answers_sentences, batch_best_answers_contexts
         return batch_best_answers, batch_best_answers_score, batch_best_answers_place, batch_best_answers_doc_ids
