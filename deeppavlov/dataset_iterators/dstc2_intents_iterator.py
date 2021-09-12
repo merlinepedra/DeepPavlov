@@ -68,6 +68,9 @@ class Dstc2IntentsDatasetIterator(BasicClassificationDatasetIterator):
                 curr_intents = []
                 if reply['intents']:
                     for intent in reply['intents']:
+                        if '+' in intent['act']:
+                            curr_intents.extend(intent['act'].split('+'))
+                            continue
                         for slot in intent['slots']:
                             tmp_act = intent['act']
                             if '_' in tmp_act.split('+')[-1]:
