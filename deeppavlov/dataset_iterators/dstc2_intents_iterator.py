@@ -69,10 +69,14 @@ class Dstc2IntentsDatasetIterator(BasicClassificationDatasetIterator):
                 if reply['intents']:
                     for intent in reply['intents']:
                         for slot in intent['slots']:
-                            if slot[0] == 'slot':
-                                curr_intents.append(intent['act'] + '_' + slot[1])
+                            tmp_act = intent['act']
+                            if '_' in tmp_act.split('+')[-1]:
+                                curr_intents.append(tmp_act)
                             else:
-                                curr_intents.append(intent['act'] + '_' + slot[0])
+                                if slot[0] == 'slot':
+                                    curr_intents.append(intent['act'] + '_' + slot[1])
+                                else:
+                                    curr_intents.append(intent['act'] + '_' + slot[0])
                         if len(intent['slots']) == 0:
                             curr_intents.append(intent['act'])
                 else:
