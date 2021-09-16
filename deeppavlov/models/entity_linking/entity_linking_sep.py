@@ -823,6 +823,7 @@ class EntityLinkerSep(Component, Serializable):
                         entities_scores_list.append(entities_scores)
                     tm_ind_end = time.time()
                     log.debug(f"search by index time {tm_ind_end - tm_ind_st}")
+                    '''
                     tm_descr_st = time.time()
                     if self.use_descriptions:
                         if self.rank_in_runtime:
@@ -841,6 +842,7 @@ class EntityLinkerSep(Component, Serializable):
                                                                                   sentences_offsets_list, substr_lens)
                     tm_descr_end = time.time()
                     log.debug(f"description time {tm_descr_end - tm_descr_st}")
+                    '''
                 except:
                     entity_ids_list = ["ERROR" for _ in entity_substr_list]
             entity_ids_batch.append(entity_ids_list)
