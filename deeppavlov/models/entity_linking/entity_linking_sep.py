@@ -844,7 +844,12 @@ class EntityLinkerSep(Component, Serializable):
                     log.debug(f"description time {tm_descr_end - tm_descr_st}")
                     '''
                 except:
-                    entity_ids_list = ["ERROR" for _ in entity_substr_list]
+                    if self.num_entities_to_return == 1:
+                        entity_ids_list = ["ERROR" for _ in entity_substr_list]
+                        conf_list = [(0.0, 0, 0.0) for _ in entity_substr_list]
+                    else:
+                        entity_ids_list = [["ERROR"] for _ in entity_substr_list]
+                        conf_list = [[(0.0, 0, 0.0)] for _ in entity_substr_list]
             entity_ids_batch.append(entity_ids_list)
             conf_batch.append(conf_list)
 
