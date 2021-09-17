@@ -693,7 +693,7 @@ class EntityLinkerSep(Component, Serializable):
                         words += entity_substr
                         entity_substr_num += [i for _ in entity_substr]
 
-                    ent_substr_tfidfs = self.tfidf_vectorizer.transform(words).toarray().astype(np.float32)
+                    #ent_substr_tfidfs = self.tfidf_vectorizer.transform(words).toarray().astype(np.float32)
                     #D_all, I_all = self.tfidf_faiss_index.search(ent_substr_tfidfs, self.num_tfidf_faiss_candidate_entities)
 
                     ind_i = 0
@@ -862,12 +862,15 @@ class EntityLinkerSep(Component, Serializable):
         return entity_ids_batch, conf_batch
 
     def morph_parse(self, word):
+        '''
         morph_parse_tok = self.morph.parse(word)[0]
         if morph_parse_tok.tag.POS in {"NOUN", "ADJ", "ADJF"}:
             normal_form = morph_parse_tok.inflect({"nomn"}).word
         else:
             normal_form = morph_parse_tok.normal_form
         return normal_form
+        '''
+        return word
 
     def sum_scores(self, candidate_entities: List[Tuple[str, int]], substr_len: int) -> List[Tuple[str, float]]:
         entities_with_scores_sum = defaultdict(int)
