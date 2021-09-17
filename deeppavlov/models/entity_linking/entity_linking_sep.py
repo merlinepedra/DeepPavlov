@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import re
 import time
 from logging import getLogger
@@ -397,6 +398,7 @@ class EntityLinkerSep(Component, Serializable):
             if self.num_iter > 0:
                 del self.tfidf_faiss_index
                 del self.fasttext_faiss_index
+                gc.collect()
             self.tfidf_faiss_index = faiss.read_index(str(expand_path(self.tfidf_faiss_index_filename)))
             if self.use_gpu:
                 res = faiss.StandardGpuResources()
