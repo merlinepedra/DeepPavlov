@@ -679,11 +679,11 @@ class EntityLinkerSep(Component, Serializable):
             if entity_substr_list:
                 try:
                     tm_ind_st = time.time()
-                    ft_entity_emb_list = [self.alies2ft_vec(entity_substr) for entity_substr in entity_substr_list]
+                    #ft_entity_emb_list = [self.alies2ft_vec(entity_substr) for entity_substr in entity_substr_list]
                     ft_res = []
-                    if ft_entity_emb_list:
-                        ft_res = self.fasttext_faiss_index.search(np.array(ft_entity_emb_list),
-                                                                  self.num_ft_faiss_candidate_entities)
+                    #if ft_entity_emb_list:
+                    #    ft_res = self.fasttext_faiss_index.search(np.array(ft_entity_emb_list),
+                    #                                              self.num_ft_faiss_candidate_entities)
                     D_ft_all, I_ft_all = [], []
                     if len(ft_res) == 2:
                         D_ft_all, I_ft_all = ft_res
@@ -694,7 +694,7 @@ class EntityLinkerSep(Component, Serializable):
                         entity_substr_num += [i for _ in entity_substr]
 
                     ent_substr_tfidfs = self.tfidf_vectorizer.transform(words).toarray().astype(np.float32)
-                    D_all, I_all = self.tfidf_faiss_index.search(ent_substr_tfidfs, self.num_tfidf_faiss_candidate_entities)
+                    #D_all, I_all = self.tfidf_faiss_index.search(ent_substr_tfidfs, self.num_tfidf_faiss_candidate_entities)
 
                     ind_i = 0
                     candidate_entities_dict = {index: [] for index in range(len(entity_substr_list))}
@@ -724,6 +724,7 @@ class EntityLinkerSep(Component, Serializable):
                                         entities_set = self.filter_entities_by_tags(entities_set, tag, proba)
                                 for entity in entities_set:
                                     candidate_entities[entity] = 1.0
+                            '''
                             else:
                                 scores_list = D_all[ind_i]
                                 ind_list = I_all[ind_i]
@@ -740,9 +741,10 @@ class EntityLinkerSep(Component, Serializable):
                                             candidate_entities[entity] = score
                             candidate_entities_dict[i] += [(entity, cand_entity_len, score)
                                                            for (entity, cand_entity_len), score
-                                                           in candidate_entities.items()]
+                                                           in candidate_entities.items()] '''
                             ind_i += 1
 
+                    '''
                     if isinstance(D_ft_all, np.ndarray):
                         candidate_entities_ft_dict = {index: [] for index in range(len(entity_substr_list))}
                         for index, (entity_substr, scores_list, ind_list, tag, proba) \
@@ -775,7 +777,7 @@ class EntityLinkerSep(Component, Serializable):
                                             entities_set.add((entity_id, fuzz_ratio))
                             entities_set = self.filter_entities_by_tags(entities_set, tag, proba)
                             candidate_entities_ft_dict[index] = list(entities_set)
-                        candidate_entities_ft_total = list(candidate_entities_ft_dict.values())
+                        candidate_entities_ft_total = list(candidate_entities_ft_dict.values()) '''
 
                     candidate_entities_total = candidate_entities_dict.values()
                     candidate_entities_total = [self.sum_scores(candidate_entities, substr_len)
@@ -850,6 +852,10 @@ class EntityLinkerSep(Component, Serializable):
                     else:
                         entity_ids_list = [["ERROR"] for _ in entity_substr_list]
                         conf_list = [[(0.0, 0, 0.0)] for _ in entity_substr_list]
+                if entity_substr_list and entity_ids_list[0] == []:
+                    entity_ids_list = [["Not Found"] for _ in entity_substr_list]
+                    conf_list = [[(0.0, 0, 0.0)] for _ in entity_substr_list]
+            
             entity_ids_batch.append(entity_ids_list)
             conf_batch.append(conf_list)
 
