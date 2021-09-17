@@ -394,7 +394,7 @@ class EntityLinkerSep(Component, Serializable):
     def load_vectorizers(self):
         if not self.fit_tfidf_vectorizer:
             self.tfidf_vectorizer = load_pickle(expand_path(self.tfidf_vectorizer_filename))
-            if num_iter > 0:
+            if self.num_iter > 0:
                 del self.tfidf_faiss_index
                 del self.fasttext_faiss_index
             self.tfidf_faiss_index = faiss.read_index(str(expand_path(self.tfidf_faiss_index_filename)))
