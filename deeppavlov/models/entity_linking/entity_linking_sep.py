@@ -389,6 +389,19 @@ class EntityLinkerSep(Component, Serializable):
 
         self.tfidf_faiss_index.nprobe = self.tfidf_index_nprobe
         self.fasttext_faiss_index.nprobe = self.fasttext_index_nprobe
+        self.num_iter = 0
+    
+    def load_vectorizers(self):
+        if not self.fit_tfidf_vectorizer:
+            self.tfidf_vectorizer = load_pickle(expand_path(self.tfidf_vectorizer_filename))
+            self.tfidf_faiss_index = faiss.read_index(str(expand_path(self.tfidf_faiss_index_filename)))
+            if self.use_gpu:
+                res = faiss.StandardGpuResources()
+                self.tfidf_faiss_index = faiss.index_cpu_to_gpu(res, 0, self.tfidf_faiss_index)
+
+        self.fasttext_vectorizer = fasttext.load_model(str(expand_path(self.fasttext_vectorizer_filename)))
+        if not self.fit_fasttext_vectorizer:
+            self.fasttext_faiss_index = faiss.read_index(str(expand_path(self.fasttext_faiss_index_filename)))
 
     def load(self) -> None:
         self.word_to_idlist = load_pickle(self.load_path / self.word_to_idlist_filename)
@@ -405,16 +418,7 @@ class EntityLinkerSep(Component, Serializable):
                 else:
                     self.label_to_q[label] = [q_id]
         self.labels_list = list(self.label_to_q.keys())
-        if not self.fit_tfidf_vectorizer:
-            self.tfidf_vectorizer = load_pickle(expand_path(self.tfidf_vectorizer_filename))
-            self.tfidf_faiss_index = faiss.read_index(str(expand_path(self.tfidf_faiss_index_filename)))
-            if self.use_gpu:
-                res = faiss.StandardGpuResources()
-                self.tfidf_faiss_index = faiss.index_cpu_to_gpu(res, 0, self.tfidf_faiss_index)
-
-        self.fasttext_vectorizer = fasttext.load_model(str(expand_path(self.fasttext_vectorizer_filename)))
-        if not self.fit_fasttext_vectorizer:
-            self.fasttext_faiss_index = faiss.read_index(str(expand_path(self.fasttext_faiss_index_filename)))
+        self.load_vectorizers()
 
         if self.q_to_descr_filename:
             self.q_to_descr = load_pickle(self.load_path / self.q_to_descr_filename)
@@ -649,6 +653,8 @@ class EntityLinkerSep(Component, Serializable):
             entity_ids_batch[i] = entity_ids_list
             tags_batch[i] = tags_list
             entity_labels_batch[i] = entity_labels_list
+        
+        self.num_iter += 1
 
         if self.return_confidences:
             return entity_substr_batch, conf_batch, entity_offsets_batch, entity_ids_batch, tags_batch, \
@@ -662,6 +668,8 @@ class EntityLinkerSep(Component, Serializable):
                       entity_offsets_batch: List[List[List[int]]],
                       sentences_batch: List[List[str]],
                       sentences_offsets_batch: List[List[Tuple[int, int]]]) -> List[List[List[Tuple[int, int]]]]:
+        if self.num_iter%100 == 0 and self.num_iter > 0:
+            self.load_vectorizers()
         log.debug(f"entity substr batch {entity_substr_batch}")
         log.debug(f"entity offsets batch {entity_offsets_batch}")
         entity_substr_batch = [[entity_substr.replace('"', '') for entity_substr in entity_substr_list] for entity_substr_list in entity_substr_batch]
@@ -679,11 +687,11 @@ class EntityLinkerSep(Component, Serializable):
             if entity_substr_list:
                 try:
                     tm_ind_st = time.time()
-                    #ft_entity_emb_list = [self.alies2ft_vec(entity_substr) for entity_substr in entity_substr_list]
+                    ft_entity_emb_list = [self.alies2ft_vec(entity_substr) for entity_substr in entity_substr_list]
                     ft_res = []
-                    #if ft_entity_emb_list:
-                    #    ft_res = self.fasttext_faiss_index.search(np.array(ft_entity_emb_list),
-                    #                                              self.num_ft_faiss_candidate_entities)
+                    if ft_entity_emb_list:
+                        ft_res = self.fasttext_faiss_index.search(np.array(ft_entity_emb_list),
+                                                                  self.num_ft_faiss_candidate_entities)
                     D_ft_all, I_ft_all = [], []
                     if len(ft_res) == 2:
                         D_ft_all, I_ft_all = ft_res
@@ -693,8 +701,8 @@ class EntityLinkerSep(Component, Serializable):
                         words += entity_substr
                         entity_substr_num += [i for _ in entity_substr]
 
-                    #ent_substr_tfidfs = self.tfidf_vectorizer.transform(words).toarray().astype(np.float32)
-                    #D_all, I_all = self.tfidf_faiss_index.search(ent_substr_tfidfs, self.num_tfidf_faiss_candidate_entities)
+                    ent_substr_tfidfs = self.tfidf_vectorizer.transform(words).toarray().astype(np.float32)
+                    D_all, I_all = self.tfidf_faiss_index.search(ent_substr_tfidfs, self.num_tfidf_faiss_candidate_entities)
 
                     ind_i = 0
                     candidate_entities_dict = {index: [] for index in range(len(entity_substr_list))}
@@ -862,15 +870,12 @@ class EntityLinkerSep(Component, Serializable):
         return entity_ids_batch, conf_batch
 
     def morph_parse(self, word):
-        '''
         morph_parse_tok = self.morph.parse(word)[0]
         if morph_parse_tok.tag.POS in {"NOUN", "ADJ", "ADJF"}:
             normal_form = morph_parse_tok.inflect({"nomn"}).word
         else:
             normal_form = morph_parse_tok.normal_form
         return normal_form
-        '''
-        return word
 
     def sum_scores(self, candidate_entities: List[Tuple[str, int]], substr_len: int) -> List[Tuple[str, float]]:
         entities_with_scores_sum = defaultdict(int)
