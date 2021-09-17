@@ -337,6 +337,7 @@ class EntityLinkerSep(Component, Serializable):
         self.bert_emb_batch_size = bert_emb_batch_size
         self.q_to_descr = {}
         self.descr_to_emb = {}
+        self.num_iter = 0
 
         self.load()
 
@@ -389,7 +390,6 @@ class EntityLinkerSep(Component, Serializable):
 
         self.tfidf_faiss_index.nprobe = self.tfidf_index_nprobe
         self.fasttext_faiss_index.nprobe = self.fasttext_index_nprobe
-        self.num_iter = 0
     
     def load_vectorizers(self):
         if not self.fit_tfidf_vectorizer:
