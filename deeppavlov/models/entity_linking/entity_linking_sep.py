@@ -394,6 +394,9 @@ class EntityLinkerSep(Component, Serializable):
     def load_vectorizers(self):
         if not self.fit_tfidf_vectorizer:
             self.tfidf_vectorizer = load_pickle(expand_path(self.tfidf_vectorizer_filename))
+            if num_iter > 0:
+                del self.tfidf_faiss_index
+                del self.fasttext_faiss_index
             self.tfidf_faiss_index = faiss.read_index(str(expand_path(self.tfidf_faiss_index_filename)))
             if self.use_gpu:
                 res = faiss.StandardGpuResources()
@@ -732,7 +735,6 @@ class EntityLinkerSep(Component, Serializable):
                                         entities_set = self.filter_entities_by_tags(entities_set, tag, proba)
                                 for entity in entities_set:
                                     candidate_entities[entity] = 1.0
-                            '''
                             else:
                                 scores_list = D_all[ind_i]
                                 ind_list = I_all[ind_i]
@@ -749,10 +751,9 @@ class EntityLinkerSep(Component, Serializable):
                                             candidate_entities[entity] = score
                             candidate_entities_dict[i] += [(entity, cand_entity_len, score)
                                                            for (entity, cand_entity_len), score
-                                                           in candidate_entities.items()] '''
+                                                           in candidate_entities.items()]
                             ind_i += 1
 
-                    '''
                     if isinstance(D_ft_all, np.ndarray):
                         candidate_entities_ft_dict = {index: [] for index in range(len(entity_substr_list))}
                         for index, (entity_substr, scores_list, ind_list, tag, proba) \
@@ -785,7 +786,7 @@ class EntityLinkerSep(Component, Serializable):
                                             entities_set.add((entity_id, fuzz_ratio))
                             entities_set = self.filter_entities_by_tags(entities_set, tag, proba)
                             candidate_entities_ft_dict[index] = list(entities_set)
-                        candidate_entities_ft_total = list(candidate_entities_ft_dict.values()) '''
+                        candidate_entities_ft_total = list(candidate_entities_ft_dict.values())
 
                     candidate_entities_total = candidate_entities_dict.values()
                     candidate_entities_total = [self.sum_scores(candidate_entities, substr_len)
