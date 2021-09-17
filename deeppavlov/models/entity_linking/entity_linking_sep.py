@@ -396,8 +396,12 @@ class EntityLinkerSep(Component, Serializable):
         if not self.fit_tfidf_vectorizer:
             self.tfidf_vectorizer = load_pickle(expand_path(self.tfidf_vectorizer_filename))
             if self.num_iter > 0:
-                del self.tfidf_faiss_index
-                del self.fasttext_faiss_index
+                self.tfidf_faiss_index.reset()
+                self.fasttext_faiss_index.reset()
+                self.tfidf_faiss_index.quantizer.reset()
+                self.tfidf_faiss_index.quantizer.this.disown()
+                self.fasttext_faiss_index.quantizer.reset()
+                self.fasttext_faiss_index.quantizer.this.disown()
                 gc.collect()
             self.tfidf_faiss_index = faiss.read_index(str(expand_path(self.tfidf_faiss_index_filename)))
             if self.use_gpu:
@@ -577,11 +581,11 @@ class EntityLinkerSep(Component, Serializable):
                     found_conf = conf[0]
                     if entity_ids != ["not in wiki"]:
                         full_names[entity_substr_tuple] = [tag, entity_ids, conf, entity_labels]
-                    if found_conf[1] > 50 and found_conf[2] > 0.3:
+                    if found_conf[1] > 50 and ((len(found_conf) > 2 and found_conf[2] > 0.3) or len(found_conf) <= 2):
                         full_names[entity_substr_tuple] = [tag, entity_ids, conf, entity_labels]
-                    if found_conf[1] > 20 and found_conf[2] > 0.2:
+                    if found_conf[1] > 20 and ((len(found_conf) > 2 and found_conf[2] > 0.2) or len(found_conf) <= 2):
                         full_names_2[entity_substr_tuple] = [tag, entity_ids, conf, entity_labels]
-                if tag == "PER" and len(entity_substr.split()) == 1:
+                if tag == "PER" and len(entity_substr.split()) == 1 and entity_labels:
                     entity_label_split = entity_labels[0].lower().split()
                     entity_substr_tuple = tuple(entity_label_split)
                     found_conf = conf[0]
@@ -589,17 +593,17 @@ class EntityLinkerSep(Component, Serializable):
                             and (entity_substr[:-2].startswith(entity_label_split[-1][:-2]) \
                                  or entity_label_split[-1][:-2].startswith(entity_substr[:-2])) \
                             and len(entity_substr) > 3 and len(entity_label_split[-1]) > 3:
-                        if found_conf[1] > 50 and found_conf[2] > 0.3:
+                        if found_conf[1] > 50 and ((len(found_conf) > 2 and found_conf[2] > 0.3) or len(found_conf) <= 2):
                             full_names[entity_substr_tuple] = [tag, entity_ids, conf, entity_labels]
-                        if found_conf[1] > 20 and found_conf[2] > 0.2:
+                        if found_conf[1] > 20 and ((len(found_conf) > 2 and found_conf[2] > 0.2) or len(found_conf) <= 2):
                             full_names_2[entity_substr_tuple] = [tag, entity_ids, conf, entity_labels]
                     if "," in entity_labels[0] and "ли" not in entity_label_split \
                             and (entity_substr[:-2].startswith(entity_label_split[0][:-2]) \
                                  or entity_label_split[0][:-2].startswith(entity_substr[:-2])) \
                             and len(entity_substr) > 3 and len(entity_label_split[0]) > 3:
-                        if found_conf[1] > 50 and found_conf[2] > 0.3:
+                        if found_conf[1] > 50 and ((len(found_conf) > 2 and found_conf[2] > 0.3) or len(found_conf) <= 2):
                             full_names[entity_substr_tuple] = [tag, entity_ids, conf, entity_labels]
-                        if found_conf[1] > 20 and found_conf[2] > 0.2:
+                        if found_conf[1] > 20 and ((len(found_conf) > 2 and found_conf[2] > 0.2) or len(found_conf) <= 2):
                             full_names_2[entity_substr_tuple] = [tag, entity_ids, conf, entity_labels]
                         
             putin = []
@@ -674,6 +678,7 @@ class EntityLinkerSep(Component, Serializable):
                       sentences_batch: List[List[str]],
                       sentences_offsets_batch: List[List[Tuple[int, int]]]) -> List[List[List[Tuple[int, int]]]]:
         if self.num_iter%100 == 0 and self.num_iter > 0:
+            print("reboot")
             self.load_vectorizers()
         log.debug(f"entity substr batch {entity_substr_batch}")
         log.debug(f"entity offsets batch {entity_offsets_batch}")
@@ -821,10 +826,11 @@ class EntityLinkerSep(Component, Serializable):
                         log.debug(f"candidate_entities {candidate_entities[:10]}")
                         entities_scores = {entity: (substr_score, pop_score)
                                            for entity, substr_score, pop_score in candidate_entities}
+                        init_candidate_entities = candidate_entities
                         candidate_entities = [candidate_entity[0] for candidate_entity
-                                              in candidate_entities][:self.num_entities_for_bert_ranking]
+                                              in init_candidate_entities][:self.num_entities_for_bert_ranking]
                         conf = [candidate_entity[1:] for candidate_entity
-                                in candidate_entities][:self.num_entities_for_bert_ranking]
+                                in init_candidate_entities][:self.num_entities_for_bert_ranking]
                         log.debug(f"{entity_substr} candidate_entities before bert ranking {candidate_entities[:10]}")
                         candidate_entities_list.append(candidate_entities)
                         if self.num_entities_to_return == 1 and candidate_entities:
@@ -866,6 +872,18 @@ class EntityLinkerSep(Component, Serializable):
                 if entity_substr_list and entity_ids_list[0] == []:
                     entity_ids_list = [["Not Found"] for _ in entity_substr_list]
                     conf_list = [[(0.0, 0, 0.0)] for _ in entity_substr_list]
+                
+                corr_entity_ids_list = []
+                corr_conf_list = []
+                for entity_ids, conf in zip(entity_ids_list, conf_list):
+                    if entity_ids == []:
+                        corr_entity_ids_list.append(["Not Found"])
+                        corr_conf_list.append([(0.0, 0)])
+                    else:
+                        corr_entity_ids_list.append(entity_ids)
+                        corr_conf_list.append(conf)
+                entity_ids_list = corr_entity_ids_list
+                conf_list = corr_conf_list
             
             entity_ids_batch.append(entity_ids_list)
             conf_batch.append(conf_list)
