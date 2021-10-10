@@ -1,0 +1,44 @@
+{
+  "chainer": {
+    "in": ["question_raw"],
+    "pipe": [
+      {
+        "class_name": "ner_chunker",
+        "batch_size": 16,
+        "max_chunk_len" : 180,
+        "max_seq_len" : 400,
+        "vocab_file": "DeepPavlov/rubert-base-cased",
+        "in": ["question_raw"],
+        "out": ["x_chunk", "chunk_nums", "chunk_sentences_offsets", "chunk_sentences"]
+      },
+      {
+        "thres_proba": 0.05,
+        "o_tag": "O",
+        "tags_file": "{NER_PATH}/tag.dict",
+        "return_entities_with_tags": true,
+        "class_name": "entity_detection_parser",
+        "id": "edp"
+      },
+      {
+        "class_name": "ner_chunk_model",
+        "ner": {"config_path": "{CONFIGS_PATH}/ner/ner_rured.json"},
+        "ner_parser": "#edp",
+        "in": ["x_chunk", "chunk_nums", "chunk_sentences_offsets", "chunk_sentences"],
+        "out": ["entity_substr", "entity_offsets", "tags", "probas", "sentences_offsets",
+                "sentences", "tokens", "entity_positions", "sentences_tokens"]
+      }
+    ],
+    "out": ["entity_substr", "tags"]
+  },
+  "metadata": {
+    "variables": {
+      "ROOT_PATH": "~/.deeppavlov",
+      "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
+      "MODELS_PATH": "{ROOT_PATH}/models",
+      "CONFIGS_PATH": "{DEEPPAVLOV_PATH}/configs",
+      "NER_PATH": "~/.deeppavlov/models/ner_rured"
+    },
+    "download": [
+    ]
+  }
+}
