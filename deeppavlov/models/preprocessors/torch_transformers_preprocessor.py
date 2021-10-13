@@ -22,7 +22,7 @@ import torch
 from typing import Tuple, List, Optional, Union, Dict, Set
 
 import numpy as np
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, BertTokenizer
 from transformers.data.processors.utils import InputFeatures
 
 from deeppavlov.core.commands.utils import expand_path
@@ -272,6 +272,129 @@ class TorchSquadTransformersPreprocessor(Component):
             return input_features, tokens
         else:
             return input_features
+
+
+@register('adopting_preprocessor')
+class AdoptingPreprocessor(Component):
+    def __init__(self,
+                 vocab_file: str,
+                 do_lower_case: bool = True,
+                 max_seq_length: int = 512,
+                 return_tokens: bool = False,
+                 **kwargs) -> None:
+        self.max_seq_length = max_seq_length
+        self.return_tokens = return_tokens
+        self.re_tokenizer = re.compile(r"[\w']+|[^\w ]")
+        self.tokenizer = BertTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
+        special_tokens_dict = {'additional_special_tokens': ['<TEXT>', '<NER>', '<TOPICS>', '<CITES>']}
+        num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
+    
+    def __call__(self, text_batch, entities_batch, entities_inters_batch, classes_batch, topics_batch = None, cites_batch = None):
+        wordpiece_tokens_batch = []
+        if topics_batch is None:
+            topics_batch = [[] for _ in text_batch]
+        if cites_batch is None:
+            cites_batch = [[] for _ in text_batch]
+        labels_batch = []
+        for text, entities, entities_inters, topics, cites, cls in \
+                zip(text_batch, entities_batch, entities_inters_batch, topics_batch, cites_batch, classes_batch):
+            labels_list = []
+            labels_list.append(cls)
+            
+            doc_wordpiece_tokens = []
+            doc_wordpiece_tokens.append("<TEXT>")
+            labels_list.append(0)
+            
+            entity_start_pos_list = []
+            entity_end_pos_list = []
+            text_tokens = re.findall(self.re_tokenizer, text)
+            for entity in entities:
+                entity_tokens = re.findall(self.re_tokenizer, entity)
+                for i in range(len(text_tokens) - len(entity_tokens)):
+                    matches = 0
+                    for j in range(len(entity_tokens)):
+                        if text_tokens[(i + j)] == entity_tokens[j]:
+                            matches += 1
+                    if matches == len(entity_tokens):
+                        entity_start_pos_list.append(i)
+                        entity_end_pos_list.append(i + len(entity_tokens))
+            
+            entity_inters_pos_list = []
+            text_tokens = re.findall(self.re_tokenizer, text)
+            for entity in entities_inters:
+                entity_tokens = re.findall(self.re_tokenizer, entity)
+                for i in range(len(text_tokens) - len(entity_tokens)):
+                    matches = 0
+                    for j in range(len(entity_tokens)):
+                        if text_tokens[(i + j)] == entity_tokens[j]:
+                            matches += 1
+                    if matches == len(entity_tokens):
+                        entity_inters_pos_list.append((i, i + len(entity_tokens)))
+            
+            for i in range(len(text_tokens)):
+                if i in entity_start_pos_list:
+                    doc_wordpiece_tokens.append("<NER>")
+                    labels_list.append(0)
+                elif i in entity_end_pos_list:
+                    doc_wordpiece_tokens.append("<NER>")
+                    labels_list.append(0)
+                word_tokens = self.tokenizer.tokenize(text_tokens[i])
+                found_entity_inters = False
+                for entity_inters_pos in entity_inters_pos_list:
+                    if i >= entity_inters_pos[0] and i < entity_inters_pos[1]:
+                        found_entity_inters = True
+                        break
+                if found_entity_inters:
+                    for _ in word_tokens:
+                        labels_list.append(1)
+                else:
+                    for _ in word_tokens:
+                        labels_list.append(0)
+                doc_wordpiece_tokens += word_tokens
+            
+            doc_wordpiece_tokens.append("<TEXT>")
+            labels_list.append(0)
+            
+            if topics:
+                doc_wordpiece_tokens.append("<TOPICS>")
+                topics_str = ", ".join(topics)
+                word_tokens = self.tokenizer.tokenize(topics_str)
+                doc_wordpiece_tokens += word_tokens
+                doc_wordpiece_tokens.append("<TOPICS>")
+            
+            if cites:
+                doc_wordpiece_tokens.append("<CITES>")
+                cites_str = ", ".join(cites)
+                word_tokens = self.tokenizer.tokenize(cites_str)
+                doc_wordpiece_tokens += word_tokens
+                doc_wordpiece_tokens.append("<CITES>")
+            
+            wordpiece_tokens_batch.append(doc_wordpiece_tokens)
+            labels_batch.append(labels_list[:490])
+        
+        max_len = max([len(elem) for elem in wordpiece_tokens_batch]) + 2
+        input_ids_batch = []
+        attention_mask_batch = []
+        token_type_ids_batch = []
+        for wordpiece_tokens in wordpiece_tokens_batch:
+            encoding = self.tokenizer.encode_plus(wordpiece_tokens, add_special_tokens = True,
+                                                  truncation = True, max_length=max_len,
+                                                  pad_to_max_length=True, return_attention_mask = True)
+            input_ids_batch.append(encoding["input_ids"][:490])
+            attention_mask_batch.append(encoding["attention_mask"][:490])
+            token_type_ids_batch.append(encoding["token_type_ids"][:490])
+            
+        max_len = min(max_len, 490)
+        for i in range(len(labels_batch)):
+            if len(labels_batch[i]) < max_len:
+                for j in range(max_len - len(labels_batch[i])):
+                    labels_batch[i].append(0)
+            
+        text_features = {"input_ids": input_ids_batch,
+                         "attention_mask": attention_mask_batch,
+                         "token_type_ids": token_type_ids_batch}
+            
+        return text_features, labels_batch
 
 
 @register('torch_transformers_ner_preprocessor')
