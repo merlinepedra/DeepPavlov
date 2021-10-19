@@ -21,6 +21,11 @@ from deeppavlov.models.ranking.modeling_bert import BertModel
 log = getLogger(__name__)
 
 
+def softmax_mask(val, mask):
+    inf = 1e30
+    return -inf * (1 - mask.to(torch.float32)) + val
+
+
 @register('copy_define_model')
 class CopyDefineModel(TorchModel):
 
@@ -71,7 +76,7 @@ class CopyDefineModel(TorchModel):
         self.model.zero_grad()
         self.optimizer.zero_grad()      # zero the parameter gradients
 
-        loss, softmax_scores = self.model(**_input)
+        loss, *_ = self.model(**_input)
         loss.backward()
         
         self.optimizer.step()
@@ -84,6 +89,73 @@ class CopyDefineModel(TorchModel):
             self.lr_scheduler.step()
 
         return loss.item()
+    
+    def vertical_scores(self, cls_softmax_scores, topic_softmax_scores, token_softmax_scores):
+        pred = torch.argmax(cls_softmax_scores, dim=1)
+        topic_pred = torch.argmax(topic_softmax_scores, dim=2)
+        token_pred = torch.argmax(token_softmax_scores, dim=2)
+        pred = pred.cpu()
+        pred = pred.numpy()
+        topic_pred = topic_pred.cpu()
+        topic_pred_batch = topic_pred.numpy().tolist()
+        token_pred = token_pred.cpu()
+        token_pred_batch = token_pred.numpy().tolist()
+        
+        topic_ind_batch, token_ind_batch = [], []
+        for topic_pred, token_pred in zip(topic_pred_batch, token_pred_batch):
+            topic_ind_list, token_ind_list = [], []
+            for i in range(len(topic_pred)):
+                if topic_pred[i] == 1:
+                    topic_ind_list.append(i)
+            for i in range(len(token_pred)):
+                if token_pred[i] == 1:
+                    token_ind_list.append(i)
+            topic_ind_batch.append(topic_ind_list)
+            token_ind_batch.append(token_ind_list)
+        
+        return pred, topic_ind_batch, token_ind_batch
+    
+    def horizontal_scores(self, cls_softmax_scores, topic_softmax_scores, token_softmax_scores):
+        pred = torch.argmax(cls_softmax_scores, dim=1)
+        pred = pred.cpu()
+        pred = pred.numpy()
+        topic_pred = topic_softmax_scores.cpu()
+        topic_pred_batch = topic_pred.numpy().tolist()
+        token_pred = token_softmax_scores.cpu()
+        token_pred_batch = token_pred.numpy().tolist()
+        
+        av_max_min = []
+        thres_batch = []
+        for token_pred in token_pred_batch:
+            elem_list = []
+            for elem in token_pred:
+                if elem > 0.0:
+                    elem_list.append(elem)
+            average = round(sum(elem_list) / len(elem_list), 4)
+            maximum = round(max(elem_list), 4)
+            minimum = round(min(elem_list), 4)
+            av_max_min.append((average, maximum, minimum))
+            thres = (maximum + average) / 2
+            thres_batch.append(thres)
+            
+        out = open("log_scores.txt", 'a')
+        out.write(str([round(elem, 3) for elem in token_pred_batch[0]])+'\n')
+        out.write(str(av_max_min[0])+'\n\n')
+        out.close()
+        
+        topic_ind_batch, token_ind_batch = [], []
+        for topic_pred, token_pred, thres in zip(topic_pred_batch, token_pred_batch, thres_batch):
+            topic_ind_list, token_ind_list = [], []
+            for i in range(len(topic_pred)):
+                if topic_pred[i] > 0.005:
+                    topic_ind_list.append(i)
+            for i in range(len(token_pred)):
+                if token_pred[i] > thres:
+                    token_ind_list.append(i)
+            topic_ind_batch.append(topic_ind_list)
+            token_ind_batch.append(token_ind_list)
+        
+        return pred, topic_ind_batch, token_ind_batch
 
     def __call__(self, source_ids: List[int],
                        target_ids: List[int],
@@ -96,11 +168,12 @@ class CopyDefineModel(TorchModel):
             _input[f"text_{elem}"] = torch.LongTensor(text_features[elem]).to(self.device)
 
         with torch.no_grad():
-            softmax_scores = self.model(**_input)
-            pred = torch.argmax(softmax_scores, dim=1)
-            pred = pred.cpu()
-            pred = pred.numpy()
-        return pred
+            cls_softmax_scores, topic_softmax_scores, token_softmax_scores = self.model(**_input)
+        
+        pred, topic_ind_batch, token_ind_batch = \
+            self.horizontal_scores(cls_softmax_scores, topic_softmax_scores, token_softmax_scores)
+            
+        return pred, topic_ind_batch, token_ind_batch
 
     def copy_define_model(self, **kwargs) -> nn.Module:
         return CopyDefineNetwork(
@@ -150,7 +223,8 @@ class CopyDefineNetwork(nn.Module):
         self.encoder.resize_token_embeddings(len(tokenizer) + 4)
         
         self.classifier = nn.Linear(768, 2)
-        self.token_classifier = nn.Linear(768, 2)
+        self.topic_token_classifier = nn.Linear(768, 1)
+        self.token_classifier = nn.Linear(768, 1)
 
     def forward(
             self,
@@ -174,40 +248,106 @@ class CopyDefineNetwork(nn.Module):
                                          target_ids=target_ids)
         
         cls_hidden = hidden_states[:, :1, :]
-        tokens_hidden = hidden_states[:, 1:, :]
+        topic_tokens_hidden = hidden_states[:, 1:19, :]
+        tokens_hidden = hidden_states[:, 19:, :]
+        
         cls_logits = self.classifier(cls_hidden)
+        topic_token_logits = self.topic_token_classifier(topic_tokens_hidden)
         token_logits = self.token_classifier(tokens_hidden)
-        logits = torch.cat((cls_logits, token_logits), 1)
+        
+        loss, cls_token_logits, topic_token_logits, token_logits = \
+            self.get_logits_horizontal_one(text_attention_mask, cls_logits, topic_token_logits, token_logits, labels)
+        
+        if labels is not None:
+            return loss, cls_token_logits, topic_token_logits, token_logits
+        else:
+            return cls_token_logits, topic_token_logits, token_logits
+    
+    def get_logits_horizontal_one(self, text_attention_mask, cls_logits, topic_logits, token_logits, labels):
+        cls_logits = torch.squeeze(cls_logits, dim=1)
+        topic_logits = topic_logits.squeeze(-1).contiguous()
+        topic_logits = F.softmax(topic_logits, 1)
+        
+        token_logits = token_logits.squeeze(-1).contiguous()
+        token_attention_mask = text_attention_mask[:, 19:]
+        token_logits = softmax_mask(token_logits, token_attention_mask)
+        token_logits = F.softmax(token_logits, 1)
+        
+        ce_loss_fct = nn.CrossEntropyLoss()
+        bce_loss_fct = nn.BCEWithLogitsLoss()
+        
+        total_loss = None
+        if labels is not None:
+            cls_labels = torch.LongTensor([elem[0] for elem in labels]).to(self.device)
+            cls_loss = ce_loss_fct(cls_logits, cls_labels)
+            
+            if all([elem == 1 for elem in cls_labels]):
+                topic_labels = torch.Tensor([elem[1:19] for elem in labels]).to(self.device)
+                topic_loss = bce_loss_fct(topic_logits, topic_labels)
+                
+                token_labels = [elem[19:] for elem in labels]
+                token_labels = torch.Tensor(token_labels).to(self.device)
+                token_loss = bce_loss_fct(token_logits, token_labels)
+                
+                total_loss = topic_loss + token_loss
+            else:
+                total_loss = cls_loss
+
+        return total_loss, cls_logits, topic_logits, token_logits
+            
+    def get_logits_horizontal(self, cls_logits, topic_logits, token_logits, labels):
+        cls_logits = torch.squeeze(cls_logits, dim=1)
+        ce_loss_fct = nn.CrossEntropyLoss()
+        bce_loss_fct = nn.BCEWithLogitsLoss()
+        
+        topic_logits = F.softmax(topic_logits, dim=2)
+        topic_start_logits, topic_end_logits = topic_logits.split(1, dim=-1)
+        topic_start_logits = topic_start_logits.squeeze(-1).contiguous()
+        
+        token_logits = F.softmax(token_logits, dim=2)
+        token_start_logits, token_end_logits = token_logits.split(1, dim=-1)
+        token_start_logits = token_start_logits.squeeze(-1).contiguous()
+        
+        total_loss = None
+        if labels is not None:
+            cls_labels = torch.LongTensor([elem[0] for elem in labels]).to(self.device)
+            cls_loss = ce_loss_fct(cls_logits, cls_labels)
+            
+            topic_labels = torch.Tensor([elem[1:19] for elem in labels]).to(self.device)
+            topic_loss = bce_loss_fct(topic_start_logits, topic_labels)
+            
+            token_labels = torch.Tensor([elem[19:] for elem in labels]).to(self.device)
+            token_loss = bce_loss_fct(token_start_logits, token_labels)
+            
+            total_loss = cls_loss + topic_loss + token_loss
+
+        return total_loss, cls_logits, topic_start_logits, token_start_logits
+    
+    def get_logits_vertical(self, cls_logits, topic_logits, token_logits, labels):
+        logits = torch.cat((cls_logits, topic_logits), 1)
+        logits = torch.cat((logits, token_logits), 1)
 
         loss = None
         if labels is not None:
-            #print("labels list", len(labels), [len(elem) for elem in labels])
             labels = torch.LongTensor(labels).to(self.device)
-            #print("logits size", logits.size())
-            #print("labels size", labels.size())
             loss_fct = nn.CrossEntropyLoss()
             # Only keep active parts of the loss
             if text_attention_mask is not None:
                 active_loss = text_attention_mask.view(-1) == 1
-                #print("active loss size", active_loss.size())
                 active_logits = logits.view(-1, 2)
-                #print("active logits size", active_logits.size())
                 active_labels = torch.where(
                     active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
                 )
-                #print("active_labels", active_labels)
                 loss = loss_fct(active_logits, active_labels)
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
                 
         cls_token_logits = logits[:, :1, :]
         cls_token_logits = torch.squeeze(cls_token_logits, dim=1)
-        #print("cls_token_logits", cls_token_logits)
+        topic_token_logits = logits[:, 1:19, :]
+        token_logits = logits[:, 19:, :]
         
-        if labels is not None:
-            return loss, cls_token_logits
-        else:
-            return cls_token_logits
+        return loss, cls_token_logits, topic_logits, token_logits
         
     def save(self) -> None:
         print("--------------------saving")

@@ -4,15 +4,15 @@
     "data_path": "{DOWNLOADS_PATH}/domains/domain_dataset.pickle"
   },
   "dataset_iterator": {
-    "class_name": "basic_classification_iterator"
+    "class_name": "copy_domain_iterator"
   },
   "chainer": {
-    "in": ["source_id", "target_id", "text", "entities", "entities_inters"],
-    "in_y": ["class"],
+    "in": ["source_id", "target_id", "text", "entities", "nouns", "topics"],
+    "in_y": ["class", "entities_inters", "topics_inters"],
     "pipe": [
       {
-        "in": ["text", "entities", "entities_inters", "class"],
-        "out": ["text_features", "labels"],
+        "in": ["text", "entities", "nouns", "entities_inters", "topics", "topics_inters", "class"],
+        "out": ["text_features", "labels", "topic_token_dict", "token_dict"],
         "class_name": "adopting_preprocessor",
         "max_seq_length": 512,
         "vocab_file": "{TRANSFORMER}"
@@ -21,7 +21,7 @@
         "class_name": "copy_define_model",
         "in": ["source_id", "target_id", "text_features"],
         "in_y": ["labels"],
-        "out": ["model_output"],
+        "out": ["class_pred", "topic_pred", "token_pred"],
         "save_path": "{MODEL_PATH}/model",
         "load_path": "{MODEL_PATH}/model",
         "encoder_save_path": "{MODEL_PATH}/encoder",
@@ -29,6 +29,11 @@
         "pretrained_bert": "{TRANSFORMER}",
         "learning_rate_drop_patience": 30,
         "learning_rate_drop_div": 1.5
+      },
+      {
+        "class_name": "copy_define_postprocessor",
+        "in": ["class_pred", "topic_pred", "token_pred", "topic_token_dict", "token_dict"],
+        "out": ["model_output"]
       }
     ],
     "out": ["model_output"]
@@ -36,8 +41,8 @@
   "train": {
     "epochs": 50,
     "batch_size": 10,
-    "train_metrics": ["acc"],
-    "metrics": ["acc"],
+    "train_metrics": ["domain_acc", "topic_acc", "token_acc"],
+    "metrics": ["domain_acc", "topic_acc", "token_acc"],
     "validation_patience": 100,
     "val_every_n_batches": 50,
     "log_every_n_batches": 50,
@@ -48,11 +53,11 @@
   },
   "metadata": {
     "variables": {
-      "ROOT_PATH": "~/.deeppavlov",
+      "ROOT_PATH": "/archive/evseev/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
       "TRANSFORMER": "DeepPavlov/rubert-base-cased",
-      "MODEL_PATH": "{MODELS_PATH}/copy_define"
+      "MODEL_PATH": "{MODELS_PATH}/copy_define2"
       },
     "download": [
       {

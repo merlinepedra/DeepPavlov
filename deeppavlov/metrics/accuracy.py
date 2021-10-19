@@ -17,10 +17,13 @@ import itertools
 from typing import List, Iterable
 
 import numpy as np
+import pymorphy2
 
 from deeppavlov.core.common.metrics_registry import register_metric
 from deeppavlov.models.go_bot.nlg.dto.json_nlg_response import JSONNLGResponse
 
+
+morph = pymorphy2.MorphAnalyzer()
 
 @register_metric('accuracy')
 def accuracy(y_true: [list, np.ndarray], y_predicted: [list, np.ndarray]) -> float:
@@ -46,6 +49,66 @@ def accuracy(y_true: [list, np.ndarray], y_predicted: [list, np.ndarray]) -> flo
     equalities = [_are_equal(y1, y2) for y1, y2 in zip(y_true, y_predicted)]
     correct = sum(equalities)
     return correct / examples_len if examples_len else 0
+
+
+@register_metric('domain_acc')
+def domain_acc(class_true_batch, token_true_batch, topic_true_batch, y_predicted) -> float:
+    
+    num_correct = 0
+    for (class_pred, topic_pred, token_pred), class_true, topic_true, token_true in \
+            zip(y_predicted, class_true_batch, topic_true_batch, token_true_batch):
+        if class_pred == class_true:
+            num_correct += 1
+    num_total = len(y_predicted)
+    return round(num_correct / num_total, 4)
+
+
+@register_metric('topic_acc')
+def topic_acc(class_true_batch, token_true_batch, topic_true_batch, y_predicted) -> float:
+
+    num_correct, num_pred, num_total = 0, 0, 0
+    for (class_pred, topic_pred, token_pred), class_true, topic_true, token_true in \
+            zip(y_predicted, class_true_batch, topic_true_batch, token_true_batch):
+        num_correct += len(set(topic_pred).intersection(set(topic_true)))
+        num_total += len(topic_true)
+        num_pred += len(topic_pred)
+        
+    precision = num_correct / num_pred
+    recall = num_correct / num_total
+    f1 = 2 * precision * recall / (precision + recall)
+    
+    return round(f1, 4)
+
+
+@register_metric('token_acc')
+def token_acc(class_true_batch, token_true_batch, topic_true_batch, y_predicted) -> float:
+
+    num_correct, num_pred, num_total = 0, 0, 0
+    out = open("token_acc.txt", 'a')
+    out.write(str(token_true_batch[:2])+'\n')
+    out.write(str([elem[2] for elem in y_predicted][:2])+'\n')
+    out.write("_"*60+'\n\n')
+    out.close()
+    for (class_pred, topic_pred, token_pred), class_true, topic_true, token_true in \
+            zip(y_predicted, class_true_batch, topic_true_batch, token_true_batch):
+        token_pred = set([morph.parse(tok.lower())[0].normal_form for tok in token_pred])
+        token_true = set([morph.parse(tok.lower())[0].normal_form for tok in token_true])
+        num_correct += len(token_pred.intersection(token_true))
+        num_total += len(token_true)
+        num_pred += len(token_pred)
+    
+    if num_pred == 0:
+        precision = 0
+    else:
+        precision = num_correct / num_pred
+    
+    recall = num_correct / num_total
+    if precision + recall == 0.0:
+        f1 = 0.0
+    else:
+        f1 = 2 * precision * recall / (precision + recall)
+    
+    return round(f1, 4)
 
 
 @register_metric('multitask_accuracy')

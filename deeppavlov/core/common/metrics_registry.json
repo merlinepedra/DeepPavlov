@@ -1,5 +1,8 @@
 {
   "acc": "deeppavlov.metrics.accuracy:round_accuracy",
+  "domain_acc": "deeppavlov.metrics.accuracy:domain_acc",
+  "topic_acc": "deeppavlov.metrics.accuracy:topic_acc",
+  "token_acc": "deeppavlov.metrics.accuracy:token_acc",
   "accuracy": "deeppavlov.metrics.accuracy:accuracy",
   "average__ner_f1__f1_macro__f1": "deeppavlov.metrics.fmeasure:ner_f1__f1_macro__f1",
   "average__roc_auc__roc_auc__ner_f1": "deeppavlov.metrics.fmeasure:roc_auc__roc_auc__ner_f1",
