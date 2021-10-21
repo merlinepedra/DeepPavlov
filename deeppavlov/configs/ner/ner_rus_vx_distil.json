@@ -38,7 +38,7 @@
   },
   "metadata": {
     "variables": {
-      "ROOT_PATH": "/archive/evseev/.deeppavlov",
+      "ROOT_PATH": "~/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
       "CONFIGS_PATH": "{DEEPPAVLOV_PATH}/configs",
@@ -51,12 +51,12 @@
     ],
     "download": [
       {
-        "url": "http://files.deeppavlov.ai/deeppavlov_data/ner_rus_bert_v1.tar.gz",
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/entity_linking/ner_rus_distilbert_torch.tar.gz",
         "subdir": "{MODELS_PATH}"
       },
       {
-        "url": "http://files.deeppavlov.ai/deeppavlov_data/bert/rubert_cased_L-12_H-768_A-12_v1.tar.gz",
-        "subdir": "{DOWNLOADS_PATH}/bert_models"
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/entity_linking/distilrubert_tiny_cased.tar.gz",
+        "subdir": "{DOWNLOADS_PATH}/torch_bert_models/distilrubert_tiny_cased_conversational"
       }
     ]
   }
