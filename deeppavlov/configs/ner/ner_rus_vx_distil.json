@@ -46,7 +46,8 @@
       "NER_PATH": "{MODELS_PATH}/ner_rus_distilbert_torch"
     },
     "requirements": [
-      "{DEEPPAVLOV_PATH}/requirements/transformers.txt"
+      "{DEEPPAVLOV_PATH}/requirements/transformers.txt",
+      "{DEEPPAVLOV_PATH}/requirements/tf.txt"
     ],
     "download": [
       {
