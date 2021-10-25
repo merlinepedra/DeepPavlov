@@ -172,6 +172,7 @@
   "str_utf8_encoder": "deeppavlov.models.preprocessors.str_utf8_encoder:StrUTF8Encoder",
   "stream_spacy_tokenizer": "deeppavlov.models.tokenizers.spacy_tokenizer:StreamSpacyTokenizer",
   "string_multiplier": "deeppavlov.models.preprocessors.odqa_preprocessors:StringMultiplier",
+  "syntax_parser_preprocessor": "deeppavlov.models.syntax_parser.preprocessor:SyntaxPreprocessor",
   "tag_output_prettifier": "deeppavlov.models.morpho_tagger.common:TagOutputPrettifier",
   "template_matcher": "deeppavlov.models.kbqa.template_matcher:TemplateMatcher",
   "tfidf_ranker": "deeppavlov.models.doc_retrieval.tfidf_ranker:TfidfRanker",

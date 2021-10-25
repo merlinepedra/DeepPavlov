@@ -1,0 +1,30 @@
+{
+    "chainer": {
+        "in": ["texts"],
+        "pipe": [
+            {
+                "class_name": "syntax_parser_preprocessor",
+                "vocab_file": "{BERT_PATH}/vocab.txt",
+                "syntax_parser": {"config_path": "{CONFIGS_PATH}/syntax/ru_syntagrus_joint_parsing.json"},
+                "in": ["texts"],
+                "out": ["parsed_texts"]
+            }
+        ],
+        "out": ["parsed_texts"]
+    },
+    "metadata": {
+        "variables": {
+            "ROOT_PATH": "~/.deeppavlov",
+            "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
+            "CONFIGS_PATH": "{DEEPPAVLOV_PATH}/configs",
+            "MODELS_PATH": "{ROOT_PATH}/models",
+            "BERT_PATH": "{DOWNLOADS_PATH}/bert_models/rubert_cased_L-12_H-768_A-12_v1"
+        },
+        "download": [
+        {
+            "url": "http://files.deeppavlov.ai/deeppavlov_data/bert/rubert_cased_L-12_H-768_A-12_v1.tar.gz",
+            "subdir": "{DOWNLOADS_PATH}/bert_models"
+        }
+      ]
+    }
+}
