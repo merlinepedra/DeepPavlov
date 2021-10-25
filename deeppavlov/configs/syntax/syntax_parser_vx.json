@@ -20,6 +20,10 @@
             "MODELS_PATH": "{ROOT_PATH}/models",
             "BERT_PATH": "{DOWNLOADS_PATH}/bert_models/rubert_cased_L-12_H-768_A-12_v1"
         },
+        "requirements": [
+          "{DEEPPAVLOV_PATH}/requirements/tf.txt",
+          "{DEEPPAVLOV_PATH}/requirements/bert_dp.txt"
+        ],
         "download": [
         {
             "url": "http://files.deeppavlov.ai/deeppavlov_data/bert/rubert_cased_L-12_H-768_A-12_v1.tar.gz",
