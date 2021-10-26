@@ -56,6 +56,7 @@ class NerChunker(Component):
         self.max_chunk_len = max_chunk_len
         self.batch_size = batch_size
         self.re_tokenizer = re.compile(r"[\w']+|[^\w ]")
+        vocab_file = str(expand_path(vocab_file))
         self.tokenizer = AutoTokenizer.from_pretrained(vocab_file,
                                        do_lower_case=True)
         self.punct_ext = punctuation + " " + "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
