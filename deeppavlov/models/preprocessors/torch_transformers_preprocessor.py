@@ -315,8 +315,8 @@ class TorchTransformersNerPreprocessor(Component):
         self.max_subword_length = max_subword_length
         self.subword_mask_mode = subword_mask_mode
         vocab_file = str(expand_path(vocab_file))
-        self.tokenizer = AutoTokenizer(vocab_file=vocab_file,
-                                       do_lower_case=do_lower_case)
+        self.tokenizer = AutoTokenizer.from_pretrained(vocab_file=vocab_file,
+                                                       do_lower_case=do_lower_case)
         self.token_masking_prob = token_masking_prob
 
     def __call__(self,
