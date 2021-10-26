@@ -52,7 +52,7 @@
     "download": [
       {
         "url": "http://files.deeppavlov.ai/deeppavlov_data/entity_linking/ner_rus_distilbert_torch.tar.gz",
-        "subdir": "{MODELS_PATH}"
+        "subdir": "{MODELS_PATH}/ner_rus_distilbert_torch"
       },
       {
         "url": "http://files.deeppavlov.ai/deeppavlov_data/entity_linking/distilrubert_tiny_cased.tar.gz",
