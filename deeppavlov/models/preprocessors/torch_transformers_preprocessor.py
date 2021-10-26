@@ -314,12 +314,9 @@ class TorchTransformersNerPreprocessor(Component):
         self.max_seq_length = max_seq_length
         self.max_subword_length = max_subword_length
         self.subword_mask_mode = subword_mask_mode
-        if Path(vocab_file).is_file():
-            vocab_file = str(expand_path(vocab_file))
-            self.tokenizer = AutoTokenizer(vocab_file=vocab_file,
-                                           do_lower_case=do_lower_case)
-        else:
-            self.tokenizer = AutoTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
+        vocab_file = str(expand_path(vocab_file))
+        self.tokenizer = AutoTokenizer(vocab_file=vocab_file,
+                                       do_lower_case=do_lower_case)
         self.token_masking_prob = token_masking_prob
 
     def __call__(self,
