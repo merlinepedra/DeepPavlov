@@ -1,6 +1,7 @@
 {
   "UD_pymorphy_lemmatizer": "deeppavlov.models.morpho_tagger.lemmatizer:UDPymorphyLemmatizer",
   "adopting_preprocessor": "deeppavlov.models.preprocessors.torch_transformers_preprocessor:AdoptingPreprocessor",
+  "adopting_infer_preprocessor": "deeppavlov.models.preprocessors.torch_transformers_preprocessor:AdoptingInferPreprocessor",
   "aiml_skill": "deeppavlov.skills.aiml_skill.aiml_skill:AIMLSkill",
   "api_requester": "deeppavlov.models.api_requester.api_requester:ApiRequester",
   "api_router": "deeppavlov.models.api_requester.api_router:ApiRouter",

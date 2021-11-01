@@ -1,0 +1,49 @@
+{
+  "chainer": {
+    "in": ["source_id", "target_id", "text", "entities", "nouns", "topics_with_probs", "topics", "entities_sent"],
+    "pipe": [
+      {
+        "in": ["text", "entities", "nouns", "entities", "topics_with_probs", "topics", "entities_sent"],
+        "out": ["text_features", "topic_token_dict", "token_dict", "entities_ind_sent"],
+        "class_name": "adopting_infer_preprocessor",
+        "max_seq_length": 512,
+        "vocab_file": "{TRANSFORMER}",
+        "return_sent": true
+      },
+      {
+        "class_name": "copy_define_model_sent",
+        "in": ["source_id", "target_id", "text_features", "entities_ind_sent"],
+        "out": ["class_pred", "topic_pred", "token_pred", "sent_pred"],
+        "save_path": "{MODEL_PATH}/model",
+        "load_path": "{MODEL_PATH}/model",
+        "encoder_save_path": "{MODEL_PATH}/encoder",
+        "emb_save_path": "{MODEL_PATH}",
+        "model_name": "copy_define_model",
+        "pretrained_bert": "{TRANSFORMER}",
+        "learning_rate_drop_patience": 30,
+        "learning_rate_drop_div": 1.5
+      },
+      {
+        "class_name": "copy_define_postprocessor",
+        "in": ["class_pred", "topic_pred", "token_pred", "topic_token_dict", "token_dict", "sent_pred"],
+        "out": ["model_output"]
+      }
+    ],
+    "out": ["model_output"]
+  },
+  "metadata": {
+    "variables": {
+      "ROOT_PATH": "/archive/evseev/.deeppavlov",
+      "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
+      "MODELS_PATH": "{ROOT_PATH}/models",
+      "TRANSFORMER": "DeepPavlov/rubert-base-cased",
+      "MODEL_PATH": "{MODELS_PATH}/copy_define_sent"
+      },
+    "download": [
+      {
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/domain_graph/copy_define_sent.tar.gz",
+        "subdir": "{MODELS_PATH}/copy_define_sent"
+      }
+    ]
+  }
+}

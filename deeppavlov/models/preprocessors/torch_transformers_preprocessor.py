@@ -469,7 +469,6 @@ class AdoptingPreprocessor(Component):
         input_ids_batch = []
         attention_mask_batch = []
         token_type_ids_batch = []
-        out = open("log_labels.txt", 'a')
         for text, entities, wordpiece_tokens, labels_list, nouns_inters, found_inters_tokens, label_add_tokens in \
                 zip(text_batch, entities_batch, wordpiece_tokens_batch, labels_batch, nouns_inters_batch,
                     found_inters_tokens_batch, label_add_tokens_batch):
@@ -477,23 +476,14 @@ class AdoptingPreprocessor(Component):
                                                   truncation = True, max_length=max_len,
                                                   pad_to_max_length=True, return_attention_mask = True)
             if self.number < 20:
-                out.write(str(text)+'\n')
-                out.write(str(wordpiece_tokens)+'\n')
                 labeled_toks = []
                 for tok, label in zip(wordpiece_tokens[18:], labels_list[19:]):
                     if label == 1:
                         labeled_toks.append(tok)
-                out.write("entities "+str(entities)+'\n')
-                out.write("label_add_tokens "+str(label_add_tokens)+'\n')
-                out.write("labeled_toks "+str(labeled_toks)+'\n')
-                out.write("inters_nouns "+str(nouns_inters)+'\n')
-                out.write("found_inters_tokens "+str(found_inters_tokens)+'\n')
-                out.write("_"*70+'\n')
                 self.number += 1
             input_ids_batch.append(encoding["input_ids"][:490])
             attention_mask_batch.append(encoding["attention_mask"][:490])
             token_type_ids_batch.append(encoding["token_type_ids"][:490])
-        out.close()
             
         max_len = min(max_len, 490)
         for i in range(len(labels_batch)):
@@ -509,6 +499,182 @@ class AdoptingPreprocessor(Component):
             return text_features, labels_batch, topic_token_dict_batch, token_dict_batch, entity_sent_ind_batch
         else:
             return text_features, labels_batch, topic_token_dict_batch, token_dict_batch
+
+
+@register('adopting_infer_preprocessor')
+class AdoptingInferPreprocessor(Component):
+    def __init__(self,
+                 vocab_file: str,
+                 do_lower_case: bool = True,
+                 max_seq_length: int = 512,
+                 return_tokens: bool = False,
+                 return_sent: bool = False,
+                 **kwargs) -> None:
+        self.max_seq_length = max_seq_length
+        self.return_tokens = return_tokens
+        self.re_tokenizer = re.compile(r"[\w']+|[^\w ]")
+        self.tokenizer = BertTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
+        special_tokens_dict = {'additional_special_tokens': ['<TEXT>', '<NER>', '<FREQ_TOPIC>' '<CITES>']}
+        num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
+        self.morph = pymorphy2.MorphAnalyzer()
+        self.number = 0
+        self.return_sent = return_sent
+    
+    def __call__(self, text_batch, entities_batch, nouns_batch, nouns_inters_batch, topics_batch,
+                       topics_inters_batch, entities_sent_batch):
+        wordpiece_tokens_batch = []
+        if topics_batch is None:
+            topics_batch = [[] for _ in text_batch]
+        if entities_sent_batch is None:
+            entities_sent_batch = [[] for _ in text_batch]
+        topic_token_dict_batch = []
+        token_dict_batch = []
+        found_inters_tokens_batch = []
+        label_add_tokens_batch = []
+        entity_sent_ind_batch = []
+        
+        for text, entities, nouns_inters, entities_sent, topics, topics_inters in \
+                zip(text_batch, entities_batch, nouns_inters_batch, entities_sent_batch, topics_batch,
+                    topics_inters_batch):
+            entity_sent_ind_list = []
+            used_entities = set()
+            
+            topic_token_dict = {}
+            doc_wordpiece_tokens = []
+            
+            if topics:
+                topic_tok_cnt = 0
+                doc_wordpiece_tokens.append("<FREQ_TOPIC>")
+                topic_tok_cnt += 1
+                
+                freq_topics = []
+                rare_topics = []
+                topics = list(topics.items())
+                topics = sorted(topics, key=lambda x: x[1], reverse=True)
+                for topic, score in topics:
+                    if score > 0.01:
+                        freq_topics.append(topic)
+                    else:
+                        rare_topics.append(topic)
+                
+                for freq_topic in freq_topics:
+                    word_tokens = self.tokenizer.tokenize(freq_topic)
+                    doc_wordpiece_tokens += word_tokens
+                
+                    topic_token_dict[freq_topic] = []
+                    for _ in word_tokens:
+                        topic_token_dict[freq_topic].append(topic_tok_cnt)
+                        topic_tok_cnt += 1
+                    
+                doc_wordpiece_tokens.append("<FREQ_TOPIC>")
+                topic_tok_cnt += 1
+                
+                for rare_topic in rare_topics:
+                    word_tokens = self.tokenizer.tokenize(rare_topic)
+                    doc_wordpiece_tokens += word_tokens
+                    
+                    topic_token_dict[rare_topic] = []
+                    for _ in word_tokens:
+                        topic_token_dict[rare_topic].append(topic_tok_cnt)
+                        topic_tok_cnt += 1
+            
+            token_dict = {}
+            entity_tok_cnt = 0
+            doc_wordpiece_tokens.append("<TEXT>")
+            entity_tok_cnt += 1
+            
+            entity_start_pos_list = []
+            entity_sent_start_pos_list = []
+            entity_end_pos_list = []
+            
+            text_tokens = re.findall(self.re_tokenizer, text)
+            for entity in entities:
+                entity_tokens = re.findall(self.re_tokenizer, entity)
+                for i in range(len(text_tokens) - len(entity_tokens)):
+                    matches = 0
+                    for j in range(len(entity_tokens)):
+                        if text_tokens[(i + j)] == entity_tokens[j]:
+                            matches += 1
+                    if matches == len(entity_tokens):
+                        entity_start_pos_list.append(i)
+                        if entity in entities_sent and entity not in used_entities:
+                            entity_sent_start_pos_list.append(i)
+                            used_entities.add(entity)
+                        entity_end_pos_list.append(i + len(entity_tokens))
+            
+            found_inters_tokens = []
+            entity_inters_pos_list = []
+            text_tokens = re.findall(self.re_tokenizer, text)
+            for entity in nouns_inters:
+                entity_tokens = re.findall(self.re_tokenizer, entity)
+                for i in range(len(text_tokens) - len(entity_tokens)):
+                    matches = 0
+                    for j in range(len(entity_tokens)):
+                        if text_tokens[(i + j)].lower() == entity_tokens[j].lower():
+                            matches += 1
+                        elif text_tokens[(i + j)].lower()[:3] == entity_tokens[j].lower()[:3] and \
+                                self.morph.parse(text_tokens[(i + j)].lower())[0].normal_form == self.morph.parse(entity_tokens[j].lower())[0].normal_form:
+                            matches += 1
+                    if matches == len(entity_tokens):
+                        entity_inters_pos_list.append((i, i + len(entity_tokens)))
+                        found_inters_tokens.append(text_tokens[i:i+len(entity_tokens)])
+            found_inters_tokens_batch.append(found_inters_tokens)
+            
+            label_add_tokens = []
+            for i in range(len(text_tokens)):
+                if i in entity_start_pos_list:
+                    doc_wordpiece_tokens.append("<NER>")
+                    entity_tok_cnt += 1
+                elif i in entity_end_pos_list:
+                    doc_wordpiece_tokens.append("<NER>")
+                    entity_tok_cnt += 1
+                if i in entity_sent_start_pos_list and len(doc_wordpiece_tokens) < 485:
+                    entity_sent_ind_list.append(len(doc_wordpiece_tokens))
+                word_tokens = self.tokenizer.tokenize(text_tokens[i])
+                found_entity_inters = False
+                for entity_inters_pos in entity_inters_pos_list:
+                    if i >= entity_inters_pos[0] and i < entity_inters_pos[1]:
+                        found_entity_inters = True
+                        break
+                if found_entity_inters:
+                    label_add_tokens.append(word_tokens)
+                
+                doc_wordpiece_tokens += word_tokens
+                
+                token_dict[text_tokens[i]] = []
+                for _ in word_tokens:
+                    token_dict[text_tokens[i]].append(entity_tok_cnt)
+                    entity_tok_cnt += 1
+                    
+            label_add_tokens_batch.append(label_add_tokens)
+            
+            doc_wordpiece_tokens.append("<TEXT>")
+            
+            wordpiece_tokens_batch.append(doc_wordpiece_tokens)
+            token_dict_batch.append(token_dict)
+            topic_token_dict_batch.append(topic_token_dict)
+            entity_sent_ind_batch.append(entity_sent_ind_list)
+        
+        max_len = max([len(elem) for elem in wordpiece_tokens_batch]) + 2
+        input_ids_batch = []
+        attention_mask_batch = []
+        token_type_ids_batch = []
+        for text, entities, wordpiece_tokens, nouns_inters, found_inters_tokens, label_add_tokens in \
+                zip(text_batch, entities_batch, wordpiece_tokens_batch, nouns_inters_batch,
+                    found_inters_tokens_batch, label_add_tokens_batch):
+            encoding = self.tokenizer.encode_plus(wordpiece_tokens, add_special_tokens = True,
+                                                  truncation = True, max_length=max_len,
+                                                  pad_to_max_length=True, return_attention_mask = True)
+            
+            input_ids_batch.append(encoding["input_ids"][:490])
+            attention_mask_batch.append(encoding["attention_mask"][:490])
+            token_type_ids_batch.append(encoding["token_type_ids"][:490])
+            
+        text_features = {"input_ids": input_ids_batch,
+                         "attention_mask": attention_mask_batch,
+                         "token_type_ids": token_type_ids_batch}
+        
+        return text_features, topic_token_dict_batch, token_dict_batch, entity_sent_ind_batch
 
 
 @register('copy_define_postprocessor')
