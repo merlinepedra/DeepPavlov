@@ -282,6 +282,7 @@ class AdoptingPreprocessor(Component):
                  do_lower_case: bool = True,
                  max_seq_length: int = 512,
                  return_tokens: bool = False,
+                 return_sent: bool = False,
                  **kwargs) -> None:
         self.max_seq_length = max_seq_length
         self.return_tokens = return_tokens
@@ -291,12 +292,15 @@ class AdoptingPreprocessor(Component):
         num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
         self.morph = pymorphy2.MorphAnalyzer()
         self.number = 0
+        self.return_sent = return_sent
     
     def __call__(self, text_batch, entities_batch, nouns_batch, nouns_inters_batch, topics_batch,
-                       topics_inters_batch, classes_batch, cites_batch = None):
+                       topics_inters_batch, classes_batch, entities_sent_batch = None, cites_batch = None):
         wordpiece_tokens_batch = []
         if topics_batch is None:
             topics_batch = [[] for _ in text_batch]
+        if entities_sent_batch is None:
+            entities_sent_batch = [[] for _ in text_batch]
         if cites_batch is None:
             cites_batch = [[] for _ in text_batch]
         labels_batch = []
@@ -304,10 +308,15 @@ class AdoptingPreprocessor(Component):
         token_dict_batch = []
         found_inters_tokens_batch = []
         label_add_tokens_batch = []
-        for text, entities, nouns_inters, topics, topics_inters, cites, cls in \
-                zip(text_batch, entities_batch, nouns_inters_batch, topics_batch, topics_inters_batch, cites_batch, classes_batch):
+        entity_sent_ind_batch = []
+        
+        for text, entities, nouns_inters, entities_sent, topics, topics_inters, cites, cls in \
+                zip(text_batch, entities_batch, nouns_inters_batch, entities_sent_batch, topics_batch,
+                    topics_inters_batch, cites_batch, classes_batch):
             labels_list = []
             labels_list.append(cls)
+            entity_sent_ind_list = []
+            used_entities = set()
             
             topic_token_dict = {}
             doc_wordpiece_tokens = []
@@ -369,6 +378,7 @@ class AdoptingPreprocessor(Component):
             entity_tok_cnt += 1
             
             entity_start_pos_list = []
+            entity_sent_start_pos_list = []
             entity_end_pos_list = []
             
             text_tokens = re.findall(self.re_tokenizer, text)
@@ -381,6 +391,9 @@ class AdoptingPreprocessor(Component):
                             matches += 1
                     if matches == len(entity_tokens):
                         entity_start_pos_list.append(i)
+                        if entity in entities_sent and entity not in used_entities:
+                            entity_sent_start_pos_list.append(i)
+                            used_entities.add(entity)
                         entity_end_pos_list.append(i + len(entity_tokens))
             
             found_inters_tokens = []
@@ -411,6 +424,8 @@ class AdoptingPreprocessor(Component):
                     doc_wordpiece_tokens.append("<NER>")
                     labels_list.append(0)
                     entity_tok_cnt += 1
+                if i in entity_sent_start_pos_list and len(doc_wordpiece_tokens) < 485:
+                    entity_sent_ind_list.append(len(doc_wordpiece_tokens))
                 word_tokens = self.tokenizer.tokenize(text_tokens[i])
                 found_entity_inters = False
                 for entity_inters_pos in entity_inters_pos_list:
@@ -448,6 +463,7 @@ class AdoptingPreprocessor(Component):
             labels_batch.append(labels_list[:490])
             token_dict_batch.append(token_dict)
             topic_token_dict_batch.append(topic_token_dict)
+            entity_sent_ind_batch.append(entity_sent_ind_list)
         
         max_len = max([len(elem) for elem in wordpiece_tokens_batch]) + 2
         input_ids_batch = []
@@ -489,7 +505,10 @@ class AdoptingPreprocessor(Component):
                          "attention_mask": attention_mask_batch,
                          "token_type_ids": token_type_ids_batch}
             
-        return text_features, labels_batch, topic_token_dict_batch, token_dict_batch
+        if self.return_sent:
+            return text_features, labels_batch, topic_token_dict_batch, token_dict_batch, entity_sent_ind_batch
+        else:
+            return text_features, labels_batch, topic_token_dict_batch, token_dict_batch
 
 
 @register('copy_define_postprocessor')
@@ -497,10 +516,10 @@ class CopyDefinePostprocessor(Component):
     def __init__(self, **kwargs) -> None:
         self.morph = pymorphy2.MorphAnalyzer()
     
-    def __call__(self, class_pred_batch, topic_ind_batch, token_ind_batch, topic_token_dict_batch, token_dict_batch):
+    def __call__(self, class_pred_batch, topic_ind_batch, token_ind_batch, topic_token_dict_batch, token_dict_batch, sent_pred_batch):
         model_output_batch = []
-        for class_pred, topic_ind_list, token_ind_list, topic_token_dict, token_dict in \
-                zip(class_pred_batch, topic_ind_batch, token_ind_batch, topic_token_dict_batch, token_dict_batch):
+        for class_pred, topic_ind_list, token_ind_list, topic_token_dict, token_dict, sent_pred in \
+                zip(class_pred_batch, topic_ind_batch, token_ind_batch, topic_token_dict_batch, token_dict_batch, sent_pred_batch):
             topics = []
             nouns = []
             if class_pred == 1:
@@ -514,7 +533,7 @@ class CopyDefinePostprocessor(Component):
                         if token_ind in ind_list and self.morph.parse(token)[0].tag.POS == "NOUN":
                             nouns.append(token)
                             break
-            model_output = (class_pred, topics, nouns)
+            model_output = (class_pred, topics, nouns, sent_pred)
             model_output_batch.append(model_output)
         return model_output_batch
 

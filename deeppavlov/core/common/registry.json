@@ -31,6 +31,7 @@
   "conll2003_reader": "deeppavlov.dataset_readers.conll2003_reader:Conll2003DatasetReader",
   "convert_ids2tags": "deeppavlov.models.preprocessors.ner_preprocessor:ConvertIds2Tags",
   "copy_define_model": "deeppavlov.models.ranking.copy_define_network:CopyDefineModel",
+  "copy_define_model_sent": "deeppavlov.models.ranking.copy_define_network_sent:CopyDefineModelSent",
   "copy_define_postprocessor": "deeppavlov.models.preprocessors.torch_transformers_preprocessor:CopyDefinePostprocessor",
   "copy_domain_iterator": "deeppavlov.dataset_iterators.copy_domain_iterator:CopyDomainIterator",
   "cos_sim_classifier": "deeppavlov.models.classifiers.cos_sim_classifier:CosineSimilarityClassifier",
