@@ -158,7 +158,7 @@ class NerChunker(Component):
                                     start = end + 1
                         else:
                             chunk_tokens = sentence.split()
-                            num_chunks = len(chunk_tokens) // self.max_chunk_len + int(len(chunk_tokens) % self.max_chunk > 0)
+                            num_chunks = len(chunk_tokens) // self.max_chunk_len + int(len(chunk_tokens) % self.max_chunk_len > 0)
                             for ii in range(num_chunks):
                                 chunk_tokens_elem = chunk_tokens[ii*self.max_chunk_len:(ii+1)*self.max_chunk_len]
                                 text_batch.append(" ".join(chunk_tokens_elem))
