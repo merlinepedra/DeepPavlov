@@ -532,27 +532,28 @@ class AdoptingInferPreprocessor(Component):
         found_inters_tokens_batch = []
         label_add_tokens_batch = []
         entity_sent_ind_batch = []
+        freq_topics_batch = []
         
         for text, entities, nouns_inters, entities_sent, topics, topics_inters in \
                 zip(text_batch, entities_batch, nouns_inters_batch, entities_sent_batch, topics_batch,
                     topics_inters_batch):
             entity_sent_ind_list = []
-            used_entities = set()
             
             topic_token_dict = {}
             doc_wordpiece_tokens = []
+            
+            freq_topics = []
+            rare_topics = []
             
             if topics:
                 topic_tok_cnt = 0
                 doc_wordpiece_tokens.append("<FREQ_TOPIC>")
                 topic_tok_cnt += 1
                 
-                freq_topics = []
-                rare_topics = []
                 topics = list(topics.items())
                 topics = sorted(topics, key=lambda x: x[1], reverse=True)
                 for topic, score in topics:
-                    if score > 0.01:
+                    if score > 0.03:
                         freq_topics.append(topic)
                     else:
                         rare_topics.append(topic)
@@ -578,6 +579,8 @@ class AdoptingInferPreprocessor(Component):
                         topic_token_dict[rare_topic].append(topic_tok_cnt)
                         topic_tok_cnt += 1
             
+            freq_topics_batch.append(freq_topics)
+            
             token_dict = {}
             entity_tok_cnt = 0
             doc_wordpiece_tokens.append("<TEXT>")
@@ -588,19 +591,21 @@ class AdoptingInferPreprocessor(Component):
             entity_end_pos_list = []
             
             text_tokens = re.findall(self.re_tokenizer, text)
-            for entity in entities:
+            last_ind = 0
+            for num_ent, entity in enumerate(entities):
                 entity_tokens = re.findall(self.re_tokenizer, entity)
-                for i in range(len(text_tokens) - len(entity_tokens)):
+                for i in range(last_ind, len(text_tokens) - len(entity_tokens)):
                     matches = 0
                     for j in range(len(entity_tokens)):
                         if text_tokens[(i + j)] == entity_tokens[j]:
                             matches += 1
                     if matches == len(entity_tokens):
                         entity_start_pos_list.append(i)
-                        if entity in entities_sent and entity not in used_entities:
+                        if entity in entities_sent:
                             entity_sent_start_pos_list.append(i)
-                            used_entities.add(entity)
+                        last_ind = i
                         entity_end_pos_list.append(i + len(entity_tokens))
+                        break
             
             found_inters_tokens = []
             entity_inters_pos_list = []
@@ -621,6 +626,7 @@ class AdoptingInferPreprocessor(Component):
             found_inters_tokens_batch.append(found_inters_tokens)
             
             label_add_tokens = []
+            
             for i in range(len(text_tokens)):
                 if i in entity_start_pos_list:
                     doc_wordpiece_tokens.append("<NER>")
@@ -674,7 +680,7 @@ class AdoptingInferPreprocessor(Component):
                          "attention_mask": attention_mask_batch,
                          "token_type_ids": token_type_ids_batch}
         
-        return text_features, topic_token_dict_batch, token_dict_batch, entity_sent_ind_batch
+        return text_features, topic_token_dict_batch, token_dict_batch, entity_sent_ind_batch, freq_topics_batch
 
 
 @register('copy_define_postprocessor')
@@ -686,6 +692,7 @@ class CopyDefinePostprocessor(Component):
         model_output_batch = []
         for class_pred, topic_ind_list, token_ind_list, topic_token_dict, token_dict, sent_pred in \
                 zip(class_pred_batch, topic_ind_batch, token_ind_batch, topic_token_dict_batch, token_dict_batch, sent_pred_batch):
+            print("topic_token_dict", topic_token_dict)
             topics = []
             nouns = []
             if class_pred == 1:
@@ -694,6 +701,50 @@ class CopyDefinePostprocessor(Component):
                         if topic_ind in ind_list:
                             topics.append(topic)
                             break
+                for token_ind in token_ind_list:
+                    for token, ind_list in token_dict.items():
+                        if token_ind in ind_list and self.morph.parse(token)[0].tag.POS == "NOUN":
+                            nouns.append(token)
+                            break
+            model_output = (class_pred, topics, nouns, sent_pred)
+            model_output_batch.append(model_output)
+        return model_output_batch
+
+
+@register('copy_define_infer_postprocessor')
+class CopyDefineInferPostprocessor(Component):
+    def __init__(self, **kwargs) -> None:
+        self.morph = pymorphy2.MorphAnalyzer()
+    
+    def __call__(self, class_pred_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch, topic_token_dict_batch,
+                       token_dict_batch, sent_pred_batch, freq_topics_batch):
+        model_output_batch = []
+        for class_pred, topic_pred_list, topics_with_probs, token_ind_list, topic_token_dict, token_dict, sent_pred, freq_topics in \
+                zip(class_pred_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch,
+                    topic_token_dict_batch, token_dict_batch, sent_pred_batch, freq_topics_batch):
+            topics = []
+            nouns = []
+            print("freq_topics", freq_topics)
+            if class_pred == 1:
+                probs_list_dict = {}
+                probs_dict = {}
+                for topic, topic_indices in topic_token_dict.items():
+                    for ind in topic_indices:
+                        if topic in probs_list_dict:
+                            probs_list_dict[topic].append(topic_pred_list[ind - 1])
+                        else:
+                            probs_list_dict[topic] = [topic_pred_list[ind - 1]]
+                
+                for topic in probs_list_dict:
+                    probs_dict[topic] = sum(probs_list_dict[topic]) / len(probs_list_dict[topic])
+                
+                probs_dict = list(probs_dict.items())
+                probs_dict = sorted(probs_dict, key=lambda x: x[1], reverse=True)
+                
+                print("probs_dict", probs_dict)
+                topics = [elem[0] for elem in probs_dict[:len(freq_topics)]]
+                topics = [topic for topic in topics if topics_with_probs[topic] > 0.01]
+                
                 for token_ind in token_ind_list:
                     for token, ind_list in token_dict.items():
                         if token_ind in ind_list and self.morph.parse(token)[0].tag.POS == "NOUN":

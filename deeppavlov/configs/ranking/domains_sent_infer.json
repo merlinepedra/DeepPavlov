@@ -4,7 +4,7 @@
     "pipe": [
       {
         "in": ["text", "entities", "nouns", "entities", "topics_with_probs", "topics", "entities_sent"],
-        "out": ["text_features", "topic_token_dict", "token_dict", "entities_ind_sent"],
+        "out": ["text_features", "topic_token_dict", "token_dict", "entities_ind_sent", "freq_topics"],
         "class_name": "adopting_infer_preprocessor",
         "max_seq_length": 512,
         "vocab_file": "{TRANSFORMER}",
@@ -24,8 +24,8 @@
         "learning_rate_drop_div": 1.5
       },
       {
-        "class_name": "copy_define_postprocessor",
-        "in": ["class_pred", "topic_pred", "token_pred", "topic_token_dict", "token_dict", "sent_pred"],
+        "class_name": "copy_define_infer_postprocessor",
+        "in": ["class_pred", "topic_pred", "topics_with_probs", "token_pred", "topic_token_dict", "token_dict", "sent_pred", "freq_topics"],
         "out": ["model_output"]
       }
     ],

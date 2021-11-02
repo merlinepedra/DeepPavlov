@@ -119,12 +119,10 @@ class CopyDefineModelSent(TorchModel):
         
         return pred, topic_ind_batch, token_ind_batch
     
-    def horizontal_scores(self, cls_softmax_scores, topic_softmax_scores, token_softmax_scores):
+    def horizontal_scores(self, cls_softmax_scores, token_softmax_scores):
         pred = torch.argmax(cls_softmax_scores, dim=1)
         pred = pred.cpu()
         pred = pred.numpy()
-        topic_pred = topic_softmax_scores.cpu()
-        topic_pred_batch = topic_pred.numpy().tolist()
         token_pred = token_softmax_scores.cpu()
         token_pred_batch = token_pred.numpy().tolist()
         
@@ -148,25 +146,16 @@ class CopyDefineModelSent(TorchModel):
             av_max_min.append((average, maximum, minimum))
             thres = (maximum + average) / 2
             thres_batch.append(thres)
-            
-        #out = open("log_scores.txt", 'a')
-        #out.write(str([round(elem, 3) for elem in token_pred_batch[0]])+'\n')
-        #out.write(str(av_max_min[0])+'\n\n')
-        #out.close()
         
-        topic_ind_batch, token_ind_batch = [], []
-        for topic_pred, token_pred, thres in zip(topic_pred_batch, token_pred_batch, thres_batch):
-            topic_ind_list, token_ind_list = [], []
-            for i in range(len(topic_pred)):
-                if topic_pred[i] > 0.005:
-                    topic_ind_list.append(i)
+        token_ind_batch = []
+        for token_pred, thres in zip(token_pred_batch, thres_batch):
+            token_ind_list = []
             for i in range(len(token_pred)):
                 if token_pred[i] > thres:
                     token_ind_list.append(i)
-            topic_ind_batch.append(topic_ind_list)
             token_ind_batch.append(token_ind_list)
         
-        return pred, topic_ind_batch, token_ind_batch
+        return pred, token_ind_batch
 
     def __call__(self, source_ids: List[int],
                        target_ids: List[int],
@@ -185,13 +174,14 @@ class CopyDefineModelSent(TorchModel):
         if isinstance(sent_softmax_scores, list) and not sent_softmax_scores:
             sent_softmax_scores = [[] for _ in source_ids]
         else:
+            sent_softmax_scores = F.softmax(sent_softmax_scores, dim=2)
             sent_softmax_scores = torch.argmax(sent_softmax_scores, dim=2)
             sent_softmax_scores = sent_softmax_scores.cpu().numpy().tolist()
-        
-        pred, topic_ind_batch, token_ind_batch = \
-            self.horizontal_scores(cls_softmax_scores, topic_softmax_scores, token_softmax_scores)
             
-        return pred, topic_ind_batch, token_ind_batch, sent_softmax_scores
+        topic_softmax_scores = topic_softmax_scores.cpu().numpy().tolist()
+        pred, token_ind_batch = self.horizontal_scores(cls_softmax_scores, token_softmax_scores)
+            
+        return pred, topic_softmax_scores, token_ind_batch, sent_softmax_scores
 
     def copy_define_model(self, **kwargs) -> nn.Module:
         return CopyDefineNetwork(
