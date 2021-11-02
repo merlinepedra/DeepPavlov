@@ -45,7 +45,7 @@ class NerChunker(Component):
     """
 
     def __init__(self, vocab_file: str, max_seq_len: int = 400, max_chunk_len: int = 180,
-                 batch_size: int = 30, **kwargs):
+                 batch_size: int = 2, **kwargs):
         """
 
         Args:
@@ -138,7 +138,7 @@ class NerChunker(Component):
                                     cur_len += chunk_len + 1
                                     end = start + len(chunk) + 1
                                     sentences_offsets_list.append((start, end))
-                                    sentences_list.append(chunk)
+                                    sentences_list.append(f"{chunk},")
                                     start = end + 1
                                 else:
                                     text = text.strip().strip(",")
@@ -152,19 +152,38 @@ class NerChunker(Component):
                                     text = f"{chunk}, "
                                     cur_len = chunk_len
                                     start = 0
-                                    end = start + len(chunk)
+                                    end = start + len(chunk) + 1
                                     sentences_offsets_list = [(start, end)]
-                                    sentences_list = [sentence]
+                                    sentences_list = [f"{chunk},"]
                                     start = end + 1
                         else:
-                            chunk_tokens = sentence.split()
-                            num_chunks = len(chunk_tokens) // self.max_chunk_len + int(len(chunk_tokens) % self.max_chunk_len > 0)
-                            for ii in range(num_chunks):
-                                chunk_tokens_elem = chunk_tokens[ii*self.max_chunk_len:(ii+1)*self.max_chunk_len]
-                                text_batch.append(" ".join(chunk_tokens_elem))
-                                sentences_offsets_batch.append([(0, len(chunk_tokens_elem))])
-                                sentences_batch.append([chunk_tokens_elem])
-                                nums_batch.append(n)
+                            sentence_chunks = sentence.split(" ")
+                            for chunk in sentence_chunks:
+                                chunk_tokens = re.findall(self.re_tokenizer, chunk)
+                                chunk_len = sum([len(self.tokenizer.encode_plus(token, add_special_tokens = False)["input_ids"]) for token in chunk_tokens])
+                                if cur_len + chunk_len < self.max_seq_len:
+                                    text += f"{chunk} "
+                                    cur_len += chunk_len + 1
+                                    end = start + len(chunk)
+                                    sentences_offsets_list.append((start, end))
+                                    sentences_list.append(chunk)
+                                    start = end + 1
+                                else:
+                                    text = text.strip()
+                                    if text:
+                                        text_batch.append(text)
+                                        sentences_offsets_batch.append(sentences_offsets_list)
+                                        sentences_batch.append(sentences_list)
+                                        nums_batch.append(n)
+                                        
+                                    chunk = " ".join(chunk.split()[:self.max_chunk_len])
+                                    text = f"{chunk} "
+                                    cur_len = chunk_len
+                                    start = 0
+                                    end = start + len(chunk)
+                                    sentences_offsets_list = [(start, end)]
+                                    sentences_list = [chunk]
+                                    start = end + 1
                 
             text = text.strip().strip(",")                
             if text:
