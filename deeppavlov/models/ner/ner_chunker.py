@@ -44,7 +44,7 @@ class NerChunker(Component):
         maximal sequence length to feed into BERT
     """
 
-    def __init__(self, vocab_file: str, max_seq_len: int = 400, max_chunk_len: int = 180,
+    def __init__(self, vocab_file: str, max_seq_len: int = 400, lowercase: bool = False, max_chunk_len: int = 180,
                  batch_size: int = 2, **kwargs):
         """
 
@@ -61,6 +61,7 @@ class NerChunker(Component):
                                        do_lower_case=True)
         self.punct_ext = punctuation + " " + "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
         self.russian_letters = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
+        self.lowercase = lowercase
 
     def __call__(self, docs_batch: List[str]) -> Tuple[List[List[str]], List[List[int]]]:
         """
@@ -88,6 +89,8 @@ class NerChunker(Component):
         cur_chunk_len = 0
         
         for n, doc in enumerate(docs_batch):
+            if self.lowercase:
+                doc = doc.lower()
             start = 0
             text = ""
             sentences_list = []

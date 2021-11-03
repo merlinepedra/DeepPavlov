@@ -47,6 +47,10 @@
       "NER_PATH": "{MODELS_PATH}/ner_rured"
     },
     "download": [
+      {
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/entity_linking/rubert_base_cased.tar.gz",
+        "subdir": "{DOWNLOADS_PATH}/torch_bert_models/rubert_base_cased"
+      }
     ]
   }
 }
