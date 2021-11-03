@@ -716,16 +716,16 @@ class CopyDefineInferPostprocessor(Component):
     def __init__(self, **kwargs) -> None:
         self.morph = pymorphy2.MorphAnalyzer()
     
-    def __call__(self, class_pred_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch, topic_token_dict_batch,
-                       token_dict_batch, sent_pred_batch, freq_topics_batch):
+    def __call__(self, copy_pred_batch, copy_conf_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch,
+                       topic_token_dict_batch, token_dict_batch, sent_pred_batch, freq_topics_batch):
         model_output_batch = []
-        for class_pred, topic_pred_list, topics_with_probs, token_ind_list, topic_token_dict, token_dict, sent_pred, freq_topics in \
-                zip(class_pred_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch,
+        for copy_pred, copy_conf, topic_pred_list, topics_with_probs, token_ind_list, topic_token_dict, token_dict, \
+                sent_pred, freq_topics in \
+                zip(copy_pred_batch, copy_conf_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch,
                     topic_token_dict_batch, token_dict_batch, sent_pred_batch, freq_topics_batch):
             topics = []
             nouns = []
-            print("freq_topics", freq_topics)
-            if class_pred == 1:
+            if copy_pred == 1:
                 probs_list_dict = {}
                 probs_dict = {}
                 for topic, topic_indices in topic_token_dict.items():
@@ -741,7 +741,6 @@ class CopyDefineInferPostprocessor(Component):
                 probs_dict = list(probs_dict.items())
                 probs_dict = sorted(probs_dict, key=lambda x: x[1], reverse=True)
                 
-                print("probs_dict", probs_dict)
                 topics = [elem[0] for elem in probs_dict[:len(freq_topics)]]
                 topics = [topic for topic in topics if topics_with_probs[topic] > 0.01]
                 
@@ -750,7 +749,9 @@ class CopyDefineInferPostprocessor(Component):
                         if token_ind in ind_list and self.morph.parse(token)[0].tag.POS == "NOUN":
                             nouns.append(token)
                             break
-            model_output = (class_pred, topics, nouns, sent_pred)
+            else:
+                copy_conf = 1.0 - copy_conf
+            model_output = (copy_pred, copy_conf, topics, nouns, sent_pred)
             model_output_batch.append(model_output)
         return model_output_batch
 

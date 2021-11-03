@@ -121,8 +121,9 @@ class CopyDefineModelSent(TorchModel):
     
     def horizontal_scores(self, cls_softmax_scores, token_softmax_scores):
         pred = torch.argmax(cls_softmax_scores, dim=1)
-        pred = pred.cpu()
-        pred = pred.numpy()
+        pred_conf, _ = torch.max(cls_softmax_scores, dim=1)
+        pred = pred.cpu().numpy()
+        pred_conf = pred_conf.cpu().numpy()
         token_pred = token_softmax_scores.cpu()
         token_pred_batch = token_pred.numpy().tolist()
         
@@ -155,7 +156,7 @@ class CopyDefineModelSent(TorchModel):
                     token_ind_list.append(i)
             token_ind_batch.append(token_ind_list)
         
-        return pred, token_ind_batch
+        return pred, pred_conf, token_ind_batch
 
     def __call__(self, source_ids: List[int],
                        target_ids: List[int],
@@ -179,9 +180,9 @@ class CopyDefineModelSent(TorchModel):
             sent_softmax_scores = sent_softmax_scores.cpu().numpy().tolist()
             
         topic_softmax_scores = topic_softmax_scores.cpu().numpy().tolist()
-        pred, token_ind_batch = self.horizontal_scores(cls_softmax_scores, token_softmax_scores)
+        pred, pred_conf, token_ind_batch = self.horizontal_scores(cls_softmax_scores, token_softmax_scores)
             
-        return pred, topic_softmax_scores, token_ind_batch, sent_softmax_scores
+        return pred, pred_conf, topic_softmax_scores, token_ind_batch, sent_softmax_scores
 
     def copy_define_model(self, **kwargs) -> nn.Module:
         return CopyDefineNetwork(
