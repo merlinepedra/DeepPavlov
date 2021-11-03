@@ -100,13 +100,17 @@
   },
   "metadata": {
     "variables": {
-      "ROOT_PATH": "~/.deeppavlov",
+      "ROOT_PATH": "/archive/evseev/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
-      "TRANSFORMER": "DeepPavlov/rubert-base-cased",
+      "TRANSFORMER": "{DOWNLOADS_PATH}/torch_bert_models/rubert_base_cased",
       "MODEL_PATH": "{MODELS_PATH}/ner_rured"
     },
     "download": [
+      {
+        "url": "http://files.deeppavlov.ai/v1/ner/ner_rus_bert_torch.tar.gz",
+        "subdir": "{MODELS_PATH}"
+      },
       {
         "url": "http://files.deeppavlov.ai/deeppavlov_data/ner_rured/ner_rured.pickle",
         "subdir": "{DOWNLOADS_PATH}/ner_rured"

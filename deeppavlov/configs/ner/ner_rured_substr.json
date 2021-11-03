@@ -1,14 +1,15 @@
 {
   "chainer": {
-    "in": ["question_raw"],
+    "in": ["x"],
     "pipe": [
       {
         "class_name": "ner_chunker",
         "batch_size": 16,
         "max_chunk_len" : 180,
         "max_seq_len" : 400,
-        "vocab_file": "DeepPavlov/rubert-base-cased",
-        "in": ["question_raw"],
+        "vocab_file": "{TRANSFORMER}",
+        "lowercase": true,
+        "in": ["x"],
         "out": ["x_chunk", "chunk_nums", "chunk_sentences_offsets", "chunk_sentences"]
       },
       {
@@ -38,11 +39,12 @@
   },
   "metadata": {
     "variables": {
-      "ROOT_PATH": "~/.deeppavlov",
+      "ROOT_PATH": "/archive/evseev/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
       "CONFIGS_PATH": "{DEEPPAVLOV_PATH}/configs",
-      "NER_PATH": "~/.deeppavlov/models/ner_rured"
+      "TRANSFORMER": "{DOWNLOADS_PATH}/torch_bert_models/rubert_base_cased",
+      "NER_PATH": "{MODELS_PATH}/ner_rured"
     },
     "download": [
     ]
