@@ -150,15 +150,43 @@ class NerChunker(Component):
                                         sentences_offsets_batch.append(sentences_offsets_list)
                                         sentences_batch.append(sentences_list)
                                         nums_batch.append(n)
-                                        
-                                    chunk = " ".join(chunk.split()[:self.max_chunk_len])
-                                    text = f"{chunk}, "
-                                    cur_len = chunk_len
-                                    start = 0
-                                    end = start + len(chunk) + 1
-                                    sentences_offsets_list = [(start, end)]
-                                    sentences_list = [f"{chunk},"]
-                                    start = end + 1
+                                    
+                                    if chunk_len < self.max_seq_len:
+                                        text = f"{chunk}, "
+                                        cur_len = chunk_len
+                                        start = 0
+                                        end = start + len(chunk) + 1
+                                        sentences_offsets_list = [(start, end)]
+                                        sentences_list = [f"{chunk},"]
+                                        start = end + 1
+                                    else:
+                                        new_sentence_chunks = sentence.split(" ")
+                                        for new_chunk in new_sentence_chunks:
+                                            new_chunk_tokens = re.findall(self.re_tokenizer, new_chunk)
+                                            new_chunk_len = sum([len(self.tokenizer.encode_plus(token, add_special_tokens = False)["input_ids"]) for token in new_chunk_tokens])
+                                            if cur_len + new_chunk_len < self.max_seq_len:
+                                                text = f"{new_chunk} "
+                                                cur_len = new_chunk_len
+                                                start = 0
+                                                end = start + len(new_chunk)
+                                                sentences_offsets_list.append((start, end))
+                                                sentences_list.append(new_chunk)
+                                                start = end + 1
+                                            else:
+                                                text = text.strip()
+                                                if text:
+                                                    text_batch.append(text)
+                                                    sentences_offsets_batch.append(sentences_offsets_list)
+                                                    sentences_batch.append(sentences_list)
+                                                    nums_batch.append(n)
+                                                
+                                                text = f"{new_chunk} "
+                                                cur_len = new_chunk_len
+                                                start = 0
+                                                end = start + len(new_chunk)
+                                                sentences_offsets_list = [(start, end)]
+                                                sentences_list = [new_chunk]
+                                                start = end + 1
                         else:
                             sentence_chunks = sentence.split(" ")
                             for chunk in sentence_chunks:
@@ -178,8 +206,7 @@ class NerChunker(Component):
                                         sentences_offsets_batch.append(sentences_offsets_list)
                                         sentences_batch.append(sentences_list)
                                         nums_batch.append(n)
-                                        
-                                    chunk = " ".join(chunk.split()[:self.max_chunk_len])
+                                    
                                     text = f"{chunk} "
                                     cur_len = chunk_len
                                     start = 0
