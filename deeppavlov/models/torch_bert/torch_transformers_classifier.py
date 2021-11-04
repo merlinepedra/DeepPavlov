@@ -21,7 +21,7 @@ import numpy as np
 import torch
 from overrides import overrides
 from torch.nn import BCEWithLogitsLoss
-from transformers import AutoModelForSequenceClassification, AutoConfig, AutoModel
+from transformers import BertTokenizer, AutoModelForSequenceClassification, AutoConfig, AutoModel
 from transformers.modeling_outputs import SequenceClassifierOutput
 
 from deeppavlov.core.common.errors import ConfigError
@@ -65,6 +65,7 @@ class TorchTransformersClassifierModel(TorchModel):
                  clip_norm: Optional[float] = None,
                  bert_config_file: Optional[str] = None,
                  is_binary: Optional[bool] = False,
+                 num_special_tokens: int = None,
                  **kwargs) -> None:
 
         if not optimizer_parameters:
@@ -84,6 +85,7 @@ class TorchTransformersClassifierModel(TorchModel):
         self.clip_norm = clip_norm
         self.is_binary = is_binary
         self.bert_config = None
+        self.num_special_tokens = num_special_tokens
 
         if self.multilabel and not self.one_hot_labels:
             raise RuntimeError('Use one-hot encoded labels for multilabel classification!')
@@ -97,6 +99,9 @@ class TorchTransformersClassifierModel(TorchModel):
         super().__init__(optimizer=optimizer,
                          optimizer_parameters=optimizer_parameters,
                          **kwargs)
+        tokenizer = BertTokenizer.from_pretrained(pretrained_bert)
+        if num_special_tokens:
+            self.model.resize_token_embeddings(len(tokenizer) + num_special_tokens)
 
     def train_on_batch(self, features: Dict[str, torch.tensor], y: Union[List[int], List[List[int]]]) -> Dict:
         """Train model on given batch.
@@ -241,8 +246,10 @@ class TorchTransformersClassifierModel(TorchModel):
             raise ConfigError("No pre-trained BERT model is given.")
 
         # TODO that should probably be parametrized in config
-        if self.device.type == "cuda" and torch.cuda.device_count() > 1:
-            self.model = torch.nn.DataParallel(self.model)
+        
+        tokenizer = BertTokenizer.from_pretrained(self.pretrained_bert)
+        if self.num_special_tokens:
+            self.model.resize_token_embeddings(len(tokenizer) + self.num_special_tokens)
 
         self.model.to(self.device)
 
