@@ -196,6 +196,10 @@ class EntityDetectionParser(Component):
         entities_positions_list = [position for tag, positions in entities_positions_dict.items()
                                    for position in positions]
         entities_probas_list = [proba for tag, proba  in entities_probas_dict.items() for proba in probas]
+        
+        entities_dict = dict(entities_dict)
+        entities_positions_dict = dict(entities_positions_dict)
+        entities_probas_dict = dict(entities_probas_dict)
 
         if self.return_entities_with_tags:
             return entities_dict, entities_positions_dict, entities_probas_dict
