@@ -315,6 +315,7 @@ class NerChunkModel(Component):
         for text_batch, sentences_offsets_batch, sentences_batch in \
                 zip(text_batch_list, sentences_offsets_batch_list, sentences_batch_list):
             tm_ner_st = time.time()
+            text_batch = [text.replace("\xad", " ") for text in text_batch]
             ner_tokens_batch, ner_tokens_offsets_batch, ner_probas_batch, probas_batch = self.ner(text_batch)
             entity_substr_batch, entity_positions_batch, entity_probas_batch = \
                 self.ner_parser(ner_tokens_batch, ner_probas_batch, probas_batch)
