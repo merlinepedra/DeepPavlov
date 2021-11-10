@@ -11,7 +11,6 @@ from fastapi import HTTPException
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
-from aliases import Aliases
 from deeppavlov import configs, build_model
 
 logger = getLogger(__file__)
