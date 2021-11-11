@@ -27,7 +27,7 @@ app.add_middleware(
     allow_headers=['*']
 )
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 
 ner_config = parse_config("ner_rus_distilbert_torch.json")
 entity_detection_config = parse_config("ner_rus_vx_distil.json")
