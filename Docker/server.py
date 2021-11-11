@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import shutil
+from pathlib import Path
 from typing import Dict, List
 from logging import getLogger
 
@@ -83,6 +84,7 @@ async def model(request: Request):
             logger.info(f"-------------- model_path {model_path_exp} files {files}")
             logger.warning(f"-------------- model_path {model_path_exp} files {files}")
             
+            Path(f"{model_path_exp}_new").mkdir(parents=True, exist_ok=True)
             try:
                 os.makedirs(f"{model_path_exp}_new")
             except:
