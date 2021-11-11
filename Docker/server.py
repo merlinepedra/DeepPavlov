@@ -31,10 +31,6 @@ ner = build_model(configs.ner.ner_rus_vx_distil, download=False)
 async def model(request: Request):
     while True:
         try:
-            host = next(porter.active_hosts)
-        except StopIteration:
-            raise HTTPException(status_code=500, detail='No active workers')
-        try:
             inp = await request.json()
             texts = inp["texts"]
             res = ner(texts)
