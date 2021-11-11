@@ -67,7 +67,7 @@ async def model(request: Request):
                 "class_name": "sq_reader",
                 "data_path": new_filename
             }
-            new_config["metadata"]["MODEL_PATH"] = "{MODELS_PATH}/ner_rus_distilbert_torch_new"
+            ner_config["metadata"]["MODEL_PATH"] = f"{ner_config['metadata']['MODEL_PATH']}_new"
             train_model(new_config)
             
             return {"trained": True}
@@ -95,7 +95,7 @@ async def model(request: Request):
                 "data_path": new_filename
             }
             res = evaluate_model(ner_config)
-            metrics = list(res["test"])
+            metrics = dict(res["test"])
             
             return {"metrics": metrics}
             
