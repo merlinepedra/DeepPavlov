@@ -78,10 +78,16 @@ async def model(request: Request):
             old_path = model_path.split("/")[-1]
             new_path = f"{old_path}_new"
             model_path_exp = str(expand_path(model_path))
+            new_path_exp = f"{model_path_exp}_new"
             files = os.listdir(model_path_exp)
-            if not os.path.exists(f'{model_path_exp}_new'):
-                logger.info(f"-------------- model path exp new {model_path_exp}_new")
-                logger.warning(f"-------------- model path exp new {model_path_exp}_new")
+            
+            exists = os.path.exists(new_path_exp)
+            logger.info(f"-------------- exists {new_path_exp} {exists}")
+            logger.warning(f"-------------- exists {new_path_exp} {exists}")
+            
+            if not exists:
+                logger.info(f"-------------- model path exp new {new_path_exp}")
+                logger.warning(f"-------------- model path exp new {new_path_exp}")
                 os.makedirs(f'{model_path_exp}_new')
             
             logger.info(f"-------------- model path exp {model_path_exp}")
