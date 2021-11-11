@@ -77,28 +77,18 @@ async def model(request: Request):
             model_path = ner_config["metadata"]["variables"]["MODEL_PATH"]
             old_path = model_path.split("/")[-1]
             new_path = f"{old_path}_new"
-            model_path_exp = str(expand_path(model_path))
-            new_path_exp = f"{model_path_exp}_new"
-            files = os.listdir(model_path_exp)
+            files = os.listdir(model_path)
             
             try:
-                os.makedirs(new_path_exp)
+                os.makedirs(f"{model_path}_new")
             except:
                 pass
-            exists = os.path.exists(new_path_exp)
-            logger.info(f"-------------- exists {new_path_exp} {exists}")
-            logger.warning(f"-------------- exists {new_path_exp} {exists}")
             
-            if not exists:
-                logger.info(f"-------------- model path exp new {new_path_exp}")
-                logger.warning(f"-------------- model path exp new {new_path_exp}")
-                os.makedirs(new_path_exp)
-            
-            logger.info(f"-------------- model path exp {model_path_exp}")
-            logger.warning(f"-------------- model path exp {model_path_exp}")
+            logger.info(f"-------------- model path {model_path}")
+            logger.warning(f"-------------- model path {model_path}")
             
             for fl in files:
-                shutil.copy(f"{model_path_exp}/{fl}", f'{model_path_exp}_new')
+                shutil.copy(f"{model_path}/{fl}", f'{model_path}_new')
             
             ner_config["metadata"]["variables"]["MODEL_PATH"] = f"{model_path}_new"
             logger.info(f"-------------- model path {ner_config['metadata']['variables']['MODEL_PATH']}")
