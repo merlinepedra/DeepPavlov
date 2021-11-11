@@ -79,8 +79,11 @@ async def model(request: Request):
             new_path = f"{old_path}_new"
             model_path_exp = str(expand_path(model_path))
             files = os.listdir(model_path_exp)
-            if not os.path.exists(f'{model_path}_new'):
-                os.makedirs(f'{model_path}_new')
+            if not os.path.exists(f'{model_path_exp}_new'):
+                os.makedirs(f'{model_path_exp}_new')
+            
+            logger.info(f"-------------- model path exp {model_path_exp}")
+            logger.warning(f"-------------- model path exp {model_path_exp}")
             
             for fl in files:
                 shutil.copy(f"{model_path_exp}/{fl}", f'{model_path_exp}_new')
