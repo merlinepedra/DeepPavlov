@@ -81,17 +81,12 @@ async def model(request: Request):
             model_path_exp = str(expand_path(model_path))
             files = os.listdir(model_path_exp)
             
-            logger.info(f"-------------- models {os.listdir('/root/.deeppavlov/models')}")
-            logger.warning(f"-------------- models {os.listdir('/root/.deeppavlov/models')}")
-            
             logger.info(f"-------------- model_path {model_path_exp} files {files}")
             logger.warning(f"-------------- model_path {model_path_exp} files {files}")
             
+            if os.path.exists(f"{model_path_exp}_new"):
+                shutil.rmtree(f"{model_path_exp}_new")
             Path(f"{model_path_exp}_new").mkdir(parents=True, exist_ok=True)
-            try:
-                os.makedirs(f"{model_path_exp}_new")
-            except:
-                pass
             
             for fl in files:
                 shutil.copy(f"{model_path_exp}/{fl}", f'{model_path_exp}_new')
