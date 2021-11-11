@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import shutil
 from typing import Dict, List
 from logging import getLogger
 
@@ -72,12 +73,24 @@ async def model(request: Request):
                 "class_name": "sq_reader",
                 "data_path": new_filename
             }
-            ner_config["metadata"]["variables"]["MODEL_PATH"] = \
-                f"{ner_config['metadata']['variables']['MODEL_PATH']}_new"
+            
+            model_path = ner_config["metadata"]["variables"]["MODEL_PATH"]
+            old_path = model_path.split("/")[-1]
+            new_path = f"{old_path}_new"
+            files = os.listdir(model_path)
+            if not os.path.exists(f'{model_path}_new'):
+                os.makedirs(f'{model_path}_new')
+            
+            for fl in files:
+                shutil.copy(f"{model_path}/{fl}", f'{model_path}_new')
+            
+            ner_config["metadata"]["variables"]["MODEL_PATH"] = f"{model_path}_new"
             logger.info(f"-------------- model path {ner_config['metadata']['variables']['MODEL_PATH']}")
             logger.warning(f"-------------- model path {ner_config['metadata']['variables']['MODEL_PATH']}")
             for i in range(len(ner_config["chainer"]["pipe"])):
-                if ner_config["chainer"]["pipe"][i]["class_name"] = "torch_transformers_sequence_tagger":
+                if ner_config["chainer"]["pipe"][i].get("class_name", "") == "torch_transformers_sequence_tagger":
+                    ner_config['chainer']['pipe'][i]['load_path'] = ner_config['chainer']['pipe'][i]['load_path'].replace(old_path, new_path)
+                    ner_config['chainer']['pipe'][i]['save_path'] = ner_config['chainer']['pipe'][i]['save_path'].replace(old_path, new_path)
                     logger.info(f"-------------- load path {ner_config['chainer']['pipe'][i]['load_path']}")
                     logger.warning(f"-------------- load path {ner_config['chainer']['pipe'][i]['load_path']}")
                     logger.info(f"-------------- save path {ner_config['chainer']['pipe'][i]['save_path']}")
