@@ -70,7 +70,8 @@ async def model(request: Request):
                 "class_name": "sq_reader",
                 "data_path": new_filename
             }
-            ner_config["metadata"]["MODEL_PATH"] = f"{ner_config['metadata']['MODEL_PATH']}_new"
+            ner_config["metadata"]["variables"]["MODEL_PATH"] = \
+                f"{ner_config['metadata']['variables']['MODEL_PATH']}_new"
             train_model(new_config)
             
             return {"trained": True}
