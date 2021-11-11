@@ -81,6 +81,10 @@ async def model(request: Request):
             new_path_exp = f"{model_path_exp}_new"
             files = os.listdir(model_path_exp)
             
+            try:
+                os.makedirs(new_path_exp)
+            except:
+                pass
             exists = os.path.exists(new_path_exp)
             logger.info(f"-------------- exists {new_path_exp} {exists}")
             logger.warning(f"-------------- exists {new_path_exp} {exists}")
@@ -88,7 +92,7 @@ async def model(request: Request):
             if not exists:
                 logger.info(f"-------------- model path exp new {new_path_exp}")
                 logger.warning(f"-------------- model path exp new {new_path_exp}")
-                os.makedirs(f'{model_path_exp}_new')
+                os.makedirs(new_path_exp)
             
             logger.info(f"-------------- model path exp {model_path_exp}")
             logger.warning(f"-------------- model path exp {model_path_exp}")
