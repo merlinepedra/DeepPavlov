@@ -84,8 +84,10 @@ async def model(request: Request):
             logger.info(f"-------------- model_path {model_path_exp} files {files}")
             logger.warning(f"-------------- model_path {model_path_exp} files {files}")
             
-            if os.path.exists(f"{model_path_exp}_new"):
-                shutil.rmtree(f"{model_path_exp}_new")
+            #if os.path.isfile(f"{model_path_exp}_new"):
+            #    os.remove(myfile)
+            #if os.path.isdir(f"{model_path_exp}_new"):
+            #    shutil.rmtree(f"{model_path_exp}_new")
             Path(f"{model_path_exp}_new").mkdir(parents=True, exist_ok=True)
             
             for fl in files:
