@@ -83,7 +83,7 @@ async def model(request: Request):
                 os.makedirs(f'{model_path}_new')
             
             for fl in files:
-                shutil.copy(f"{model_path}/{fl}", f'{model_path}_new')
+                shutil.copy(f"{model_path_exp}/{fl}", f'{model_path_exp}_new')
             
             ner_config["metadata"]["variables"]["MODEL_PATH"] = f"{model_path}_new"
             logger.info(f"-------------- model path {ner_config['metadata']['variables']['MODEL_PATH']}")
