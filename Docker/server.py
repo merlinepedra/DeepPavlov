@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse
-from deeppavlov.core.commands.utils import parse_config
+from deeppavlov.core.commands.utils import parse_config, expand_path
 from deeppavlov import configs, build_model, train_model, evaluate_model
 
 logger = getLogger(__file__)
@@ -77,7 +77,8 @@ async def model(request: Request):
             model_path = ner_config["metadata"]["variables"]["MODEL_PATH"]
             old_path = model_path.split("/")[-1]
             new_path = f"{old_path}_new"
-            files = os.listdir(model_path)
+            model_path_exp = str(expand_path(model_path))
+            files = os.listdir(model_path_exp)
             if not os.path.exists(f'{model_path}_new'):
                 os.makedirs(f'{model_path}_new')
             
