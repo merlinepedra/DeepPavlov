@@ -40,7 +40,7 @@ async def model(request: Request):
             inp = await request.json()
             texts = inp["x"]
             entity_substr, entity_lemm_substr, entity_offsets, entity_init_offsets, tags, sentences_offsets, \
-                sentences, probas = ner(texts)
+                sentences, probas = entity_detection(texts)
             res = {"entity_substr": entity_substr, "entity_lemm_substr": entity_lemm_substr,
                    "entity_offsets": entity_offsets, "entity_init_offsets": entity_init_offsets, "tags": tags,
                    "sentences_offsets": sentences_offsets, "sentences": sentences, "probas": probas}
@@ -72,9 +72,11 @@ async def model(request: Request):
             }
             ner_config["metadata"]["variables"]["MODEL_PATH"] = \
                 f"{ner_config['metadata']['variables']['MODEL_PATH']}_new"
-            train_model(new_config)
+            train_model(ner_config)
+            res = evaluate_model(ner_config)
+            metrics = dict(res["test"])
             
-            return {"trained": True}
+            return {"metrics": metrics}
             
         except aiohttp.client_exceptions.ClientConnectorError:
             logger.warning(f'{host} is unavailable, restarting worker container')
