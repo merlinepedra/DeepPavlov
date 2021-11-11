@@ -81,6 +81,9 @@ async def model(request: Request):
             model_path_exp = str(expand_path(model_path))
             files = os.listdir(model_path_exp)
             
+            logger.info(f"-------------- models {os.listdir('/root/.deeppavlov/models')}")
+            logger.warning(f"-------------- models {os.listdir('/root/.deeppavlov/models')}")
+            
             logger.info(f"-------------- model_path {model_path_exp} files {files}")
             logger.warning(f"-------------- model_path {model_path_exp} files {files}")
             
