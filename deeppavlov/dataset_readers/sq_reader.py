@@ -24,6 +24,7 @@ class OntonotesReader(DatasetReader):
     """Class to read training datasets in OntoNotes format"""
 
     def read(self, data_path: str):
+        data_path = str(data_path)
         if data_path.endswith(".pickle"):
             with open(data_path, 'rb') as f:
                 dataset = pickle.load(f)
