@@ -61,6 +61,7 @@ async def model(request: Request):
                 total_data = json.load(fl)
             train_data = total_data[:int(len(train_filename) * 0.9)]
             test_data = total_data[int(len(train_filename) * 0.9):]
+            logger.info(f"train data {len(train_data)} test data {len(test_data)}")
             new_filename = f"{train_filename.strip('.json')}_train.json"
             with open(new_filename, 'w', encoding="utf8") as out:
                 json.dump({"train": train_data, "valid": test_data, "test": test_data},
@@ -72,6 +73,8 @@ async def model(request: Request):
             }
             ner_config["metadata"]["variables"]["MODEL_PATH"] = \
                 f"{ner_config['metadata']['variables']['MODEL_PATH']}_new"
+            logger.info(f"model path {ner_config['metadata']['variables']['MODEL_PATH']}")
+            
             train_model(ner_config)
             res = evaluate_model(ner_config)
             metrics = dict(res["test"])
