@@ -32,7 +32,7 @@ async def model(request: Request):
     while True:
         try:
             inp = await request.json()
-            texts = inp["texts"]
+            texts = inp["x"]
             res = ner(texts)
             logger.warning(f"res {res}")
             logger.info(f"res {res}")
