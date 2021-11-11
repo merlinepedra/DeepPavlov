@@ -60,8 +60,8 @@ async def model(request: Request):
             train_filename = inp["train_filename"]
             with open(train_filename, 'r') as fl:
                 total_data = json.load(fl)
-            train_data = total_data[:int(len(train_filename) * 0.9)]
-            test_data = total_data[int(len(train_filename) * 0.9):]
+            train_data = total_data[:int(len(total_data) * 0.9)]
+            test_data = total_data[int(len(total_data) * 0.9):]
             logger.info(f"-------------- train data {len(train_data)} test data {len(test_data)}")
             logger.warning(f"-------------- train data {len(train_data)} test data {len(test_data)}")
             new_filename = f"{train_filename.strip('.json')}_train.json"
@@ -97,7 +97,7 @@ async def model(request: Request):
                     logger.info(f"-------------- save path {ner_config['chainer']['pipe'][i]['save_path']}")
                     logger.warning(f"-------------- save path {ner_config['chainer']['pipe'][i]['save_path']}")
             
-            train_model(ner_config)
+            #train_model(ner_config)
             res = evaluate_model(ner_config)
             metrics = dict(res["test"])
             
