@@ -85,7 +85,7 @@ async def model(request: Request):
             test_filename = inp["test_filename"]
             with open(test_filename, 'r') as fl:
                 test_data = json.load(fl)
-            new_filename = f"{train_filename.strip('.json')}_test.json"
+            new_filename = f"{test_filename.strip('.json')}_test.json"
             with open(new_filename, 'w', encoding="utf8") as out:
                 json.dump({"train": [], "valid": [], "test": test_data},
                           out, indent=2, ensure_ascii=False)
