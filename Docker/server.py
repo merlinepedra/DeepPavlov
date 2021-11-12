@@ -54,7 +54,7 @@ async def model(request: Request):
             loop.create_task(porter.update_container(host))
 
 @app.post("/train")
-async def model(request: Request):
+async def model_training(request: Request):
     while True:
         try:
             inp = await request.json()
@@ -117,7 +117,7 @@ async def model(request: Request):
             loop.create_task(porter.update_container(host))
 
 @app.post("/test")
-async def model(request: Request):
+async def model_testing(request: Request):
     while True:
         try:
             inp = await request.json()
