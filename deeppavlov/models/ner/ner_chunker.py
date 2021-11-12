@@ -478,7 +478,7 @@ class NerPostprocessor:
                     fnd_init = new_text.find(entity_substr.replace(" ’", "’"))
                 san_found_entity_substr = [ch for ch in found_entity_substr.lower() if (ch not in punctuation and ch != " ")]
                 san_entity_substr = [ch for ch in entity_substr.lower() if (ch not in punctuation and ch != " ")]
-                if san_entity_substr == san_found_entity_substr and fnd_init != -1:
+                if san_entity_substr == san_found_entity_substr and fnd_init != -1 and entity_substr not in punctuation:
                     new_init_start_offset = prev_init_end_offset + fnd_init
                     new_init_end_offset = new_init_start_offset + len(entity_substr)
                     for elem in delete_list:
