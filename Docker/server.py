@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=['*']
 )
 
-
+metrics_filename = "metrics_score_history.csv"
 ner_config = parse_config("ner_rus_distilbert_torch.json")
 entity_detection_config = parse_config("ner_rus_vx_distil.json")
 entity_detection = build_model(entity_detection_config, download=False)
@@ -104,7 +104,7 @@ async def model_training(request: Request):
             #train_model(ner_config)
             res = evaluate_model(ner_config)
             
-            df = pd.read_csv("metrics_score_history.csv")
+            df = pd.read_csv(metrics_filename)
             max_metric = max(df["old_metric"].max(), df["ner_metrics"].max())
             cur_metrics = dict(res["test"])
             cur_ner_f1 = cur_metrics["metrics"]["ner_f1"]
@@ -113,7 +113,7 @@ async def model_training(request: Request):
                                 "old_metric": max_metric,
                                 "new_metric": cur_ner_f1,
                                 "update_model": True}, ignore_index=True)
-                df.to_csv("metrics_score_history.csv", index=False)
+                df.to_csv(metrics_filename, index=False)
             
             return {"metrics": cur_ner_f1}
             
@@ -142,16 +142,23 @@ async def model_testing(request: Request):
                 }
             res = evaluate_model(ner_config)
             
-            df = pd.read_csv("metrics_score_history.csv")
-            max_metric = max(df["old_metric"].max(), df["ner_metrics"].max())
             cur_metrics = dict(res["test"])
             cur_ner_f1 = cur_metrics["metrics"]["ner_f1"]
-            if cur_ner_f1 > max_metric:
-                df = df.append({"time": datetime.datetime.now(),
-                                "old_metric": max_metric,
-                                "new_metric": cur_ner_f1,
-                                "update_model": True}, ignore_index=True)
-                df.to_csv("metrics_score_history.csv", index=False)
+            
+            if Path(metrics_filename).exists():
+                df = pd.read_csv(metrics_filename)
+                max_metric = max(df["old_metric"].max(), df["ner_metrics"].max())
+                if cur_ner_f1 > max_metric:
+                    df = df.append({"time": datetime.datetime.now(),
+                                    "old_metric": max_metric,
+                                    "new_metric": cur_ner_f1,
+                                    "update_model": True}, ignore_index=True)
+            else:
+                df = pd.DataFrame.from_dict({"time": [datetime.datetime.now()],
+                                             "old_metric": [cur_ner_f1],
+                                             "new_metric": [cur_ner_f1],
+                                             "update_model": [True]})
+            df.to_csv(metrics_filename, index=False)
             
             return {"metrics": cur_ner_f1}
             
