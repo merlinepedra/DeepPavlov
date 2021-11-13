@@ -1,0 +1,13 @@
+version: "3"
+
+services:
+  ner_vx:
+    container_name: ner_vx
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./:/src
+      - /archive/evseev/.deeppavlov:/root/.deeppavlov
+    ports:
+      - 8000:8000

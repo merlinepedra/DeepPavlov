@@ -101,19 +101,25 @@ async def model_training(request: Request):
                     logger.warning(f"-------------- load path {ner_config['chainer']['pipe'][i]['load_path']}")
                     logger.warning(f"-------------- save path {ner_config['chainer']['pipe'][i]['save_path']}")
             
-            #train_model(ner_config)
+            train_model(ner_config)
             res = evaluate_model(ner_config)
             
-            df = pd.read_csv(metrics_filename)
-            max_metric = max(df["old_metric"].max(), df["ner_metrics"].max())
-            cur_metrics = dict(res["test"])
-            cur_ner_f1 = cur_metrics["metrics"]["ner_f1"]
-            if cur_ner_f1 > max_metric:
-                df = df.append({"time": datetime.datetime.now(),
-                                "old_metric": max_metric,
-                                "new_metric": cur_ner_f1,
-                                "update_model": True}, ignore_index=True)
-                df.to_csv(metrics_filename, index=False)
+            if Path(metrics_filename).exists():
+                df = pd.read_csv(metrics_filename)
+                max_metric = max(df["old_metric"].max(), df["ner_metrics"].max())
+                cur_metrics = dict(res["test"])
+                cur_ner_f1 = cur_metrics["metrics"]["ner_f1"]
+                if cur_ner_f1 > max_metric:
+                    df = df.append({"time": datetime.datetime.now(),
+                                    "old_metric": max_metric,
+                                    "new_metric": cur_ner_f1,
+                                    "update_model": True}, ignore_index=True)
+            else:
+                df = pd.DataFrame.from_dict({"time": [datetime.datetime.now()],
+                                             "old_metric": [cur_ner_f1],
+                                             "new_metric": [cur_ner_f1],
+                                             "update_model": [True]})
+            df.to_csv(metrics_filename, index=False)
             
             return {"metrics": cur_ner_f1}
             
