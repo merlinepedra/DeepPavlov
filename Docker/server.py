@@ -106,7 +106,7 @@ async def model_training(request: Request):
             
             if Path(metrics_filename).exists():
                 df = pd.read_csv(metrics_filename)
-                max_metric = max(df["old_metric"].max(), df["ner_metrics"].max())
+                max_metric = max(df["old_metric"].max(), df["new_metric"].max())
                 cur_metrics = dict(res["test"])
                 cur_ner_f1 = cur_metrics["metrics"]["ner_f1"]
                 if cur_ner_f1 > max_metric:
@@ -154,7 +154,7 @@ async def model_testing(request: Request):
             
             if Path(metrics_filename).exists():
                 df = pd.read_csv(metrics_filename)
-                max_metric = max(df["old_metric"].max(), df["new_metrics"].max())
+                max_metric = max(df["old_metric"].max(), df["new_metric"].max())
                 if cur_ner_f1 > max_metric:
                     df = df.append({"time": datetime.datetime.now(),
                                     "old_metric": max_metric,
