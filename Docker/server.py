@@ -143,6 +143,7 @@ async def model_testing(request: Request):
             res = evaluate_model(ner_config)
             
             cur_metrics = dict(res["test"])
+            logger.warning(f"cur_metrics {cur_metrics}")
             cur_ner_f1 = cur_metrics["metrics"]["ner_f1"]
             
             if Path(metrics_filename).exists():
