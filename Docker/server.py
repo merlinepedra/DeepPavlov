@@ -29,7 +29,6 @@ app.add_middleware(
     allow_headers=['*']
 )
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 
 ner_config = parse_config("ner_rus_distilbert_torch.json")
 entity_detection_config = parse_config("ner_rus_vx_distil.json")
@@ -63,7 +62,6 @@ async def model_training(request: Request):
                 total_data = json.load(fl)
             train_data = total_data[:int(len(total_data) * 0.9)]
             test_data = total_data[int(len(total_data) * 0.9):]
-            logger.info(f"-------------- train data {len(train_data)} test data {len(test_data)}")
             logger.warning(f"-------------- train data {len(train_data)} test data {len(test_data)}")
             new_filename = f"{train_filename.strip('.json')}_train.json"
             with open(new_filename, 'w', encoding="utf8") as out:
@@ -81,7 +79,6 @@ async def model_training(request: Request):
             model_path_exp = str(expand_path(model_path))
             files = os.listdir(model_path_exp)
             
-            logger.info(f"-------------- model_path {model_path_exp} files {files}")
             logger.warning(f"-------------- model_path {model_path_exp} files {files}")
             
             #if os.path.isfile(f"{model_path_exp}_new"):
@@ -94,15 +91,12 @@ async def model_training(request: Request):
                 shutil.copy(f"{model_path_exp}/{fl}", f'{model_path_exp}_new')
             
             ner_config["metadata"]["variables"]["MODEL_PATH"] = f"{model_path}_new"
-            logger.info(f"-------------- model path {ner_config['metadata']['variables']['MODEL_PATH']}")
             logger.warning(f"-------------- model path {ner_config['metadata']['variables']['MODEL_PATH']}")
             for i in range(len(ner_config["chainer"]["pipe"])):
                 if ner_config["chainer"]["pipe"][i].get("class_name", "") == "torch_transformers_sequence_tagger":
                     ner_config['chainer']['pipe'][i]['load_path'] = ner_config['chainer']['pipe'][i]['load_path'].replace(old_path, new_path)
                     ner_config['chainer']['pipe'][i]['save_path'] = ner_config['chainer']['pipe'][i]['save_path'].replace(old_path, new_path)
-                    logger.info(f"-------------- load path {ner_config['chainer']['pipe'][i]['load_path']}")
                     logger.warning(f"-------------- load path {ner_config['chainer']['pipe'][i]['load_path']}")
-                    logger.info(f"-------------- save path {ner_config['chainer']['pipe'][i]['save_path']}")
                     logger.warning(f"-------------- save path {ner_config['chainer']['pipe'][i]['save_path']}")
             
             #train_model(ner_config)
@@ -121,18 +115,19 @@ async def model_testing(request: Request):
     while True:
         try:
             inp = await request.json()
-            test_filename = inp["test_filename"]
-            with open(test_filename, 'r') as fl:
-                test_data = json.load(fl)
-            new_filename = f"{test_filename.strip('.json')}_test.json"
-            with open(new_filename, 'w', encoding="utf8") as out:
-                json.dump({"train": [], "valid": [], "test": test_data},
-                          out, indent=2, ensure_ascii=False)
-            
-            ner_config["dataset_reader"] = {
-                "class_name": "sq_reader",
-                "data_path": new_filename
-            }
+            if inp is not None and isinstance(inp, dict) and inp.get("test_filename", ""):
+                test_filename = inp["test_filename"]
+                with open(test_filename, 'r') as fl:
+                    test_data = json.load(fl)
+                new_filename = f"{test_filename.strip('.json')}_test.json"
+                with open(new_filename, 'w', encoding="utf8") as out:
+                    json.dump({"train": [], "valid": [], "test": test_data},
+                              out, indent=2, ensure_ascii=False)
+                
+                ner_config["dataset_reader"] = {
+                    "class_name": "sq_reader",
+                    "data_path": new_filename
+                }
             res = evaluate_model(ner_config)
             metrics = dict(res["test"])
             
