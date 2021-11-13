@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import json
 import os
 import shutil
@@ -7,6 +8,7 @@ from typing import Dict, List
 from logging import getLogger
 
 import aiohttp
+import pandas as pd
 import requests
 import uvicorn
 from fastapi import FastAPI
@@ -101,9 +103,19 @@ async def model_training(request: Request):
             
             #train_model(ner_config)
             res = evaluate_model(ner_config)
-            metrics = dict(res["test"])
             
-            return {"metrics": metrics}
+            df = pd.read_csv("metrics_score_history.csv")
+            max_metric = max(df["old_metric"].max(), df["ner_metrics"].max())
+            cur_metrics = dict(res["test"])
+            cur_ner_f1 = cur_metrics["metrics"]["ner_f1"]
+            if cur_ner_f1 > max_metric:
+                df = df.append({"time": datetime.datetime.now(),
+                                "old_metric": max_metric,
+                                "new_metric": cur_ner_f1,
+                                "update_model": True}, ignore_index=True)
+                df.to_csv("metrics_score_history.csv", index=False)
+            
+            return {"metrics": cur_ner_f1}
             
         except aiohttp.client_exceptions.ClientConnectorError:
             logger.warning(f'{host} is unavailable, restarting worker container')
@@ -129,9 +141,19 @@ async def model_testing(request: Request):
                     "data_path": new_filename
                 }
             res = evaluate_model(ner_config)
-            metrics = dict(res["test"])
             
-            return {"metrics": metrics}
+            df = pd.read_csv("metrics_score_history.csv")
+            max_metric = max(df["old_metric"].max(), df["ner_metrics"].max())
+            cur_metrics = dict(res["test"])
+            cur_ner_f1 = cur_metrics["metrics"]["ner_f1"]
+            if cur_ner_f1 > max_metric:
+                df = df.append({"time": datetime.datetime.now(),
+                                "old_metric": max_metric,
+                                "new_metric": cur_ner_f1,
+                                "update_model": True}, ignore_index=True)
+                df.to_csv("metrics_score_history.csv", index=False)
+            
+            return {"metrics": cur_ner_f1}
             
         except aiohttp.client_exceptions.ClientConnectorError:
             logger.warning(f'{host} is unavailable, restarting worker container')
