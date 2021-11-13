@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=['*']
 )
 
-metrics_filename = "metrics_score_history.csv"
+metrics_filename = "/src/metrics_score_history.csv"
 ner_config = parse_config("ner_rus_distilbert_torch.json")
 entity_detection_config = parse_config("ner_rus_vx_distil.json")
 entity_detection = build_model(entity_detection_config, download=False)
