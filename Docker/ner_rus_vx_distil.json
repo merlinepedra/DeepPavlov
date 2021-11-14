@@ -21,7 +21,7 @@
       },
       {
         "class_name": "ner_chunk_model",
-        "ner": {"config_path": "{CONFIGS_PATH}/ner/ner_rus_distilbert_torch.json"},
+        "ner": {"config_path": "ner_rus_distilbert_torch.json"},
         "ner_parser": "#edp",
         "in": ["x_chunk", "chunk_nums", "chunk_sentences_offsets", "chunk_sentences"],
         "out": ["entity_substr", "entity_offsets", "tags", "sentences_offsets", "sentences", "probas"]
@@ -38,7 +38,7 @@
   },
   "metadata": {
     "variables": {
-      "ROOT_PATH": "~/.deeppavlov",
+      "ROOT_PATH": "/data",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
       "CONFIGS_PATH": "{DEEPPAVLOV_PATH}/configs",
