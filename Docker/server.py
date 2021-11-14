@@ -56,7 +56,7 @@ async def model(request: Request):
             loop.create_task(porter.update_container(host))
 
 
-def evaluate(ner_config):
+def evaluate(ner_config, after_training):
     res = evaluate_model(ner_config)
     logger.warning(f"metrics {res}")
     
@@ -70,12 +70,12 @@ def evaluate(ner_config):
             df = df.append({"time": datetime.datetime.now(),
                             "old_metric": max_metric,
                             "new_metric": cur_f1,
-                            "update_model": True}, ignore_index=True)
+                            "update_model": after_training}, ignore_index=True)
     else:
         df = pd.DataFrame.from_dict({"time": [datetime.datetime.now()],
                                      "old_metric": [cur_f1],
                                      "new_metric": [cur_f1],
-                                     "update_model": [False]})
+                                     "update_model": [after_training]})
     df.to_csv(metrics_filename, index=False)
     
     return cur_f1
@@ -104,7 +104,7 @@ async def get_metric(request: Request):
 
 def train(ner_config):
     train_model(ner_config)
-    cur_f1 = evaluate(ner_config)
+    cur_f1 = evaluate(ner_config, True)
 
 
 @app.get("/train")
@@ -182,7 +182,7 @@ async def model_testing(request: Request):
                     "class_name": "sq_reader",
                     "data_path": new_filename
                 }
-            cur_ner_f1 = evaluate(ner_config)
+            cur_ner_f1 = evaluate(ner_config, False)
             
             return {"metrics": cur_ner_f1}
             
