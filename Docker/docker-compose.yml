@@ -8,6 +8,6 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./:/src
-      - /archive/evseev/.deeppavlov:/root/.deeppavlov
+      - ~/data:/data
     ports:
       - 8000:8000

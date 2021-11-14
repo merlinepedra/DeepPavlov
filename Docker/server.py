@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import shutil
+import threading
 from pathlib import Path
 from typing import Dict, List
 from logging import getLogger
@@ -34,7 +35,7 @@ app.add_middleware(
 metrics_filename = "/src/metrics_score_history.csv"
 ner_config = parse_config("ner_rus_distilbert_torch.json")
 entity_detection_config = parse_config("ner_rus_vx_distil.json")
-entity_detection = build_model(entity_detection_config, download=False)
+entity_detection = build_model(entity_detection_config, download=True)
 
 @app.post("/model")
 async def model(request: Request):
@@ -54,12 +55,64 @@ async def model(request: Request):
             loop = asyncio.get_event_loop()
             loop.create_task(porter.update_container(host))
 
-@app.post("/train")
+
+def evaluate(ner_config):
+    res = evaluate_model(ner_config)
+    logger.warning(f"metrics {res}")
+    
+    metrics = dict(res["test"])
+    cur_f1 = metrics["ner_f1"]
+    
+    if Path(metrics_filename).exists():
+        df = pd.read_csv(metrics_filename)
+        max_metric = max(df["old_metric"].max(), df["new_metric"].max())
+        if cur_f1 > max_metric:
+            df = df.append({"time": datetime.datetime.now(),
+                            "old_metric": max_metric,
+                            "new_metric": cur_f1,
+                            "update_model": True}, ignore_index=True)
+    else:
+        df = pd.DataFrame.from_dict({"time": [datetime.datetime.now()],
+                                     "old_metric": [cur_f1],
+                                     "new_metric": [cur_f1],
+                                     "update_model": [False]})
+    df.to_csv(metrics_filename, index=False)
+    
+    return cur_f1
+
+
+@app.get('/last_train_metric')
+async def get_metric(request: Request):
+    while True:
+        try:
+            last_metrics = {}
+            if Path(metrics_filename).exists():
+                df = pd.read_csv(metrics_filename)
+                last_metrics = df.iloc[-1].to_dict()
+                logger.warning(f"last_metrics {last_metrics}")
+            
+            return {"success": True, "data": {"time": str(last_metrics["time"]),
+                                              "old_metric": float(last_metrics["old_metric"]),
+                                              "new_metric": float(last_metrics["new_metric"]),
+                                              "update_model": bool(last_metrics["update_model"])}}
+            
+        except aiohttp.client_exceptions.ClientConnectorError:
+            logger.warning(f'{host} is unavailable, restarting worker container')
+            loop = asyncio.get_event_loop()
+            loop.create_task(porter.update_container(host))
+
+
+def train(ner_config):
+    train_model(ner_config)
+    cur_f1 = evaluate(ner_config)
+
+
+@app.get("/train")
 async def model_training(request: Request):
     while True:
         try:
             inp = await request.json()
-            train_filename = inp["train_filename"]
+            train_filename = inp["file"]
             with open(train_filename, 'r') as fl:
                 total_data = json.load(fl)
             train_data = total_data[:int(len(total_data) * 0.9)]
@@ -101,40 +154,23 @@ async def model_training(request: Request):
                     logger.warning(f"-------------- load path {ner_config['chainer']['pipe'][i]['load_path']}")
                     logger.warning(f"-------------- save path {ner_config['chainer']['pipe'][i]['save_path']}")
             
-            train_model(ner_config)
-            res = evaluate_model(ner_config)
+            threading.Thread(target=train, args=(ner_config,)).start()
             
-            if Path(metrics_filename).exists():
-                df = pd.read_csv(metrics_filename)
-                max_metric = max(df["old_metric"].max(), df["new_metric"].max())
-                cur_metrics = dict(res["test"])
-                cur_ner_f1 = cur_metrics["metrics"]["ner_f1"]
-                if cur_ner_f1 > max_metric:
-                    df = df.append({"time": datetime.datetime.now(),
-                                    "old_metric": max_metric,
-                                    "new_metric": cur_ner_f1,
-                                    "update_model": True}, ignore_index=True)
-            else:
-                df = pd.DataFrame.from_dict({"time": [datetime.datetime.now()],
-                                             "old_metric": [cur_ner_f1],
-                                             "new_metric": [cur_ner_f1],
-                                             "update_model": [True]})
-            df.to_csv(metrics_filename, index=False)
-            
-            return {"metrics": cur_ner_f1}
+            return {"success": True, "message": "Обучение инициировано"}
             
         except aiohttp.client_exceptions.ClientConnectorError:
             logger.warning(f'{host} is unavailable, restarting worker container')
             loop = asyncio.get_event_loop()
             loop.create_task(porter.update_container(host))
 
-@app.post("/test")
+
+@app.get("/evaluate")
 async def model_testing(request: Request):
     while True:
         try:
             inp = await request.json()
-            if inp is not None and isinstance(inp, dict) and inp.get("test_filename", ""):
-                test_filename = inp["test_filename"]
+            if inp is not None and isinstance(inp, dict) and inp.get("file", ""):
+                test_filename = inp["file"]
                 with open(test_filename, 'r') as fl:
                     test_data = json.load(fl)
                 new_filename = f"{test_filename.strip('.json')}_test.json"
@@ -146,26 +182,7 @@ async def model_testing(request: Request):
                     "class_name": "sq_reader",
                     "data_path": new_filename
                 }
-            res = evaluate_model(ner_config)
-            
-            cur_metrics = dict(res["test"])
-            logger.warning(f"cur_metrics {cur_metrics}")
-            cur_ner_f1 = cur_metrics["ner_f1"]
-            
-            if Path(metrics_filename).exists():
-                df = pd.read_csv(metrics_filename)
-                max_metric = max(df["old_metric"].max(), df["new_metric"].max())
-                if cur_ner_f1 > max_metric:
-                    df = df.append({"time": datetime.datetime.now(),
-                                    "old_metric": max_metric,
-                                    "new_metric": cur_ner_f1,
-                                    "update_model": True}, ignore_index=True)
-            else:
-                df = pd.DataFrame.from_dict({"time": [datetime.datetime.now()],
-                                             "old_metric": [cur_ner_f1],
-                                             "new_metric": [cur_ner_f1],
-                                             "update_model": [True]})
-            df.to_csv(metrics_filename, index=False)
+            cur_ner_f1 = evaluate(ner_config)
             
             return {"metrics": cur_ner_f1}
             
