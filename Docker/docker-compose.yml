@@ -8,6 +8,6 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./:/src
-      - ~/data:/data
+      - ~:/data
     ports:
       - 8000:8000
