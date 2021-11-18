@@ -11,6 +11,7 @@ from logging import getLogger
 import aiohttp
 import pandas as pd
 import requests
+import torch
 import uvicorn
 from fastapi import FastAPI
 from fastapi import HTTPException
@@ -105,6 +106,7 @@ async def get_metric(request: Request):
 def train(ner_config):
     train_model(ner_config)
     cur_f1 = evaluate(ner_config, True)
+    torch.cuda.empty_cache()
 
 
 @app.get("/train")
