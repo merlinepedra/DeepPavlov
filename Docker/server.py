@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import json
 import os
+import pickle
 import shutil
 import threading
 from pathlib import Path
@@ -72,6 +73,14 @@ def evaluate(ner_config, after_training):
                             "old_metric": max_metric,
                             "new_metric": cur_f1,
                             "update_model": after_training}, ignore_index=True)
+            if after_training:
+                model_path = ner_config["metadata"]["variables"]["MODEL_PATH"]
+                model_path_exp = str(expand_path(model_path))
+                files = os.listdir(model_path_exp)
+                new_model_path_exp = model_path_exp.strip("_new")
+                for fl in files:
+                    shutil.copy(f"{model_path_exp}/{fl}", new_model_path_exp)
+                shutil.rmtree(model_path_exp)
     else:
         df = pd.DataFrame.from_dict({"time": [datetime.datetime.now()],
                                      "old_metric": [cur_f1],
@@ -115,10 +124,18 @@ async def model_training(request: Request):
         try:
             inp = await request.json()
             train_filename = inp["file"]
-            with open(train_filename, 'r') as fl:
-                total_data = json.load(fl)
-            train_data = total_data[:int(len(total_data) * 0.9)]
-            test_data = total_data[int(len(total_data) * 0.9):]
+            if train_filename.endswith(".json"):
+                with open(train_filename, 'r') as fl:
+                    total_data = json.load(fl)
+            elif train_filename.endswith(".pickle"):
+                with open(train_filename, 'rb') as fl:
+                    total_data = pickle.load(fl)
+            if isinstance(total_data, list):
+                train_data = total_data[:int(len(total_data) * 0.9)]
+                test_data = total_data[int(len(total_data) * 0.9):]
+            elif isinstance(total_data, dict) and "train" in total_data and "test" in total_data:
+                train_data = total_data["train"]
+                test_data = total_data["test"]
             logger.warning(f"-------------- train data {len(train_data)} test data {len(test_data)}")
             new_filename = f"{train_filename.strip('.json')}_train.json"
             with open(new_filename, 'w', encoding="utf8") as out:
@@ -173,12 +190,20 @@ async def model_testing(request: Request):
             inp = await request.json()
             if inp is not None and isinstance(inp, dict) and inp.get("file", ""):
                 test_filename = inp["file"]
-                with open(test_filename, 'r') as fl:
-                    test_data = json.load(fl)
+                if test_filename.endswith(".json"):
+                    with open(test_filename, 'r') as fl:
+                        test_data = json.load(fl)
+                elif test_filename.endswith(".pickle"):
+                    with open(test_filename, 'rb') as fl:
+                        test_data = pickle.load(fl)
                 new_filename = f"{test_filename.strip('.json')}_test.json"
                 with open(new_filename, 'w', encoding="utf8") as out:
-                    json.dump({"train": [], "valid": [], "test": test_data},
-                              out, indent=2, ensure_ascii=False)
+                    if isinstance(test_data, list):
+                        json.dump({"train": [], "valid": [], "test": test_data},
+                                  out, indent=2, ensure_ascii=False)
+                    elif isinstance(test_data, dict) and "test" in test_data:
+                        json.dump({"train": [], "valid": [], "test": test_data["test"]},
+                                  out, indent=2, ensure_ascii=False)
                 
                 ner_config["dataset_reader"] = {
                     "class_name": "sq_reader",
