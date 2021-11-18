@@ -6,7 +6,7 @@ import pickle
 import shutil
 import threading
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 from logging import getLogger
 
 import aiohttp
@@ -14,7 +14,7 @@ import pandas as pd
 import requests
 import torch
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile
 from fastapi import HTTPException
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -119,33 +119,27 @@ def train(ner_config):
 
 
 @app.get("/train")
-async def model_training(request: Request):
+async def model_training(fl: Optional[UploadFile] = File(None)):
     while True:
         try:
-            inp = await request.json()
-            train_filename = inp["file"]
-            if train_filename.endswith(".json"):
-                with open(train_filename, 'r') as fl:
-                    total_data = json.load(fl)
-            elif train_filename.endswith(".pickle"):
-                with open(train_filename, 'rb') as fl:
-                    total_data = pickle.load(fl)
-            if isinstance(total_data, list):
-                train_data = total_data[:int(len(total_data) * 0.9)]
-                test_data = total_data[int(len(total_data) * 0.9):]
-            elif isinstance(total_data, dict) and "train" in total_data and "test" in total_data:
-                train_data = total_data["train"]
-                test_data = total_data["test"]
-            logger.warning(f"-------------- train data {len(train_data)} test data {len(test_data)}")
-            new_filename = f"{train_filename.strip('.json')}_train.json"
-            with open(new_filename, 'w', encoding="utf8") as out:
-                json.dump({"train": train_data, "valid": test_data, "test": test_data},
-                          out, indent=2, ensure_ascii=False)
-            
-            ner_config["dataset_reader"] = {
-                "class_name": "sq_reader",
-                "data_path": new_filename
-            }
+            if fl:
+                total_data = json.loads(await fl.read())
+                if isinstance(total_data, list):
+                    train_data = total_data[:int(len(total_data) * 0.9)]
+                    test_data = total_data[int(len(total_data) * 0.9):]
+                elif isinstance(total_data, dict) and "train" in total_data and "test" in total_data:
+                    train_data = total_data["train"]
+                    test_data = total_data["test"]
+                logger.warning(f"-------------- train data {len(train_data)} test data {len(test_data)}")
+                new_filename = f"{train_filename.strip('.json')}_train.json"
+                with open(new_filename, 'w', encoding="utf8") as out:
+                    json.dump({"train": train_data, "valid": test_data, "test": test_data},
+                              out, indent=2, ensure_ascii=False)
+                
+                ner_config["dataset_reader"] = {
+                    "class_name": "sq_reader",
+                    "data_path": new_filename
+                }
             
             model_path = ner_config["metadata"]["variables"]["MODEL_PATH"]
             old_path = model_path.split("/")[-1]
@@ -184,19 +178,12 @@ async def model_training(request: Request):
 
 
 @app.get("/evaluate")
-async def model_testing(request: Request):
+async def model_testing(fl: Optional[UploadFile] = File(None)):
     while True:
         try:
-            inp = await request.json()
-            if inp is not None and isinstance(inp, dict) and inp.get("file", ""):
-                test_filename = inp["file"]
-                if test_filename.endswith(".json"):
-                    with open(test_filename, 'r') as fl:
-                        test_data = json.load(fl)
-                elif test_filename.endswith(".pickle"):
-                    with open(test_filename, 'rb') as fl:
-                        test_data = pickle.load(fl)
-                new_filename = f"{test_filename.strip('.json')}_test.json"
+            if fl:
+                test_data = json.loads(await fl.read())
+                new_filename = "test_filename.json"
                 with open(new_filename, 'w', encoding="utf8") as out:
                     if isinstance(test_data, list):
                         json.dump({"train": [], "valid": [], "test": test_data},
