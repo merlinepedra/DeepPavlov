@@ -131,7 +131,7 @@ async def model_training(fl: Optional[UploadFile] = File(None)):
                     train_data = total_data["train"]
                     test_data = total_data["test"]
                 logger.warning(f"-------------- train data {len(train_data)} test data {len(test_data)}")
-                new_filename = f"{train_filename.strip('.json')}_train.json"
+                new_filename = "train_filename.json"
                 with open(new_filename, 'w', encoding="utf8") as out:
                     json.dump({"train": train_data, "valid": test_data, "test": test_data},
                               out, indent=2, ensure_ascii=False)
