@@ -20,7 +20,7 @@ class WikidataParser:
     """
 
     def __init__(self, wikidata_filename: str,
-                 chunk_num_lines: int = 60000,
+                 chunk_num_lines: int = 6000,
                  total_lines_num: int = 86000000,
                  save_path: str = "~/.deeppavlov/downloads/wikidata_parse",
                  log_path: str = "~/.deeppavlov/downloads/wikidata_parse_logs",
