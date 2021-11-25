@@ -53,6 +53,7 @@
   "dirty_comments_preprocessor": "deeppavlov.models.preprocessors.dirty_comments_preprocessor:DirtyCommentsPreprocessor",
   "docred_reader": "deeppavlov.dataset_readers.docred_reader:DocREDDatasetReader",
   "document_chunker": "deeppavlov.models.preprocessors.odqa_preprocessors:DocumentChunker",
+  "domain_preprocessor": "deeppavlov.models.preprocessors.domain_preprocessor:DomainPreprocessor",
   "dstc2_intents_iterator": "deeppavlov.dataset_iterators.dstc2_intents_iterator:Dstc2IntentsDatasetIterator",
   "dstc2_ner_iterator": "deeppavlov.dataset_iterators.dstc2_ner_iterator:Dstc2NerDatasetIterator",
   "dstc2_reader": "deeppavlov.dataset_readers.dstc2_reader:DSTC2DatasetReader",

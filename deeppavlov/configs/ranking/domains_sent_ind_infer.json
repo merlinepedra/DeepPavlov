@@ -1,7 +1,14 @@
 {
   "chainer": {
-    "in": ["source_id", "target_id", "text", "entities", "nouns", "topics_with_probs", "entities_sent"],
+    "in": ["source", "target", "source_topics", "target_topics", "text", "entities", "nouns", "topics_with_probs", "entities_sent"],
     "pipe": [
+      {
+        "in": ["source", "target", "source_topics", "target_topics"],
+        "out": ["source_id", "target_id"],
+        "class_name": "domain_preprocessor",
+        "domain_to_ind_filename": "{DOWNLOADS_PATH}/domains/domain_to_ind.json",
+        "domain_topics_filename": "{DOWNLOADS_PATH}/domains/domain_topics_dict.json"
+      },
       {
         "in": ["text", "entities", "nouns", "entities", "topics_with_probs", "entities_sent"],
         "out": ["text_features", "topic_ind", "token_ind", "topic_token_dict", "token_dict", "entities_ind_sent"],
@@ -34,13 +41,21 @@
   },
   "metadata": {
     "variables": {
-      "ROOT_PATH": "~/.deeppavlov",
+      "ROOT_PATH": "/archive/evseev/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
       "TRANSFORMER": "DeepPavlov/rubert-base-cased",
       "MODEL_PATH": "{MODELS_PATH}/copy_define_ind"
       },
     "download": [
+      {
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/domain_graph/domain_to_ind.json",
+        "subdir": "{DOWNLOADS_PATH}/domains"
+      },
+      {
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/domain_graph/domain_topics_dict.json",
+        "subdir": "{DOWNLOADS_PATH}/domains"
+      },
       {
         "url": "http://files.deeppavlov.ai/deeppavlov_data/domain_graph/copy_define_ind.tar.gz",
         "subdir": "{MODELS_PATH}/copy_define_sent"
