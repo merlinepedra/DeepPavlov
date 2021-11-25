@@ -125,7 +125,7 @@ class WikidataParser:
         Method for parsing of Wikidata file
         """
         line = self.bz_file.readline()
-        log.debug("parse function started")
+        log.info("parse function started")
         
         parsed_lines = 0
         num_iterations = 0
