@@ -353,6 +353,7 @@ class CopyDefineNetwork(nn.Module):
         bl_cls = (domain_embs0.unsqueeze(3) * cls_hidden.unsqueeze(2)).view(-1, 768 * 8)
         cls_logits = self.bilinear_cls(bl_cls)
         cls_logits = torch.squeeze(cls_logits, dim=1)
+        cls_logits = F.softmax(cls_logits, 1)
         
         bl_topic = (domain_embs1.unsqueeze(4) * topic_hidden.unsqueeze(3)).view(bs, -1, 768 * 8)
         topic_logits = self.bilinear_topic(bl_topic)
