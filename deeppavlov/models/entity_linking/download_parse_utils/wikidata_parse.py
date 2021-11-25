@@ -105,7 +105,7 @@ class WikidataParser:
         """
         Method for parallel processing of lines from Wikidata file
         """
-        cur_wiki_dict = {}
+        cur_wiki_list = []
         for n, line in enumerate(lines_list):
             if n%50 == 0:
                 log.info(f"{num_proc} {n} parsed")
@@ -118,7 +118,7 @@ class WikidataParser:
                 self.log_to_file("run_error", line, self.log_parse_errors)
                 self.log_to_file("run_error", e, self.log_parse_errors)
             if entity_id:
-                cur_wiki_dict[entity_id] = entity_info
+                cur_wiki_list.append((entity_id, entity_info))
         log.info(f"{num_proc}, finished parsing")
         self.wiki_dict[num_proc] = cur_wiki_dict
         log.info(f"{num_proc}, added to wiki dict")
@@ -180,14 +180,17 @@ class WikidataParser:
 
             log.info("adding to total_dict")
             total_dict = {}
+            total_list = []
             for key in self.wiki_dict:
+                total_list += self.wiki_dict[key]
+                
+            cur_cnt = 0
+            for entity, entity_info in total_list:
                 log.info(f"adding to total dict {key}")
-                cur_cnt = 0
-                for entity in self.wiki_dict[key]:
-                    total_dict[entity] = self.wiki_dict[key][entity]
-                    cur_cnt += 1
-                    if cur_cnt % 50:
-                        log.info(f"adding to total dict, iteration {cur_cnt}")
+                total_dict[entity] = entity_info
+                cur_cnt += 1
+                if cur_cnt % 50 == 0:
+                    log.info(f"adding to total dict, iteration {cur_cnt}")
 
             save_pickle(total_dict, self.save_path / f"{num_iterations}.pickle")
 
