@@ -107,7 +107,8 @@ class WikidataParser:
         """
         cur_wiki_dict = {}
         for n, line in enumerate(lines_list):
-            log.info(f"{num_proc} {n} parsed")
+            if n%50 == 0:
+                log.info(f"{num_proc} {n} parsed")
             line = line[:-2]
             entity_id = ""
             try:
@@ -118,7 +119,9 @@ class WikidataParser:
                 self.log_to_file("run_error", e, self.log_parse_errors)
             if entity_id:
                 cur_wiki_dict[entity_id] = entity_info
+        log.info(f"{num_proc}, finished parsing")
         self.wiki_dict[num_proc] = cur_wiki_dict
+        log.info(f"{num_proc}, added to wiki dict")
                      
 
     def parse(self, continue_parsing: bool = False):
@@ -175,6 +178,7 @@ class WikidataParser:
             for worker in workers:
                 worker.join()
 
+            log.info("adding to total_dict")
             total_dict = {}
             for key in self.wiki_dict:
                 for entity in self.wiki_dict[key]:
