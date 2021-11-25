@@ -181,8 +181,13 @@ class WikidataParser:
             log.info("adding to total_dict")
             total_dict = {}
             for key in self.wiki_dict:
+                log.info(f"adding to total dict {key}")
+                cur_cnt = 0
                 for entity in self.wiki_dict[key]:
                     total_dict[entity] = self.wiki_dict[key][entity]
+                    cur_cnt += 1
+                    if cur_cnt % 50:
+                        log.info(f"adding to total dict, iteration {cur_cnt}")
 
             save_pickle(total_dict, self.save_path / f"{num_iterations}.pickle")
 
