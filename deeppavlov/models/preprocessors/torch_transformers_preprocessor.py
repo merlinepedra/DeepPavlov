@@ -501,6 +501,529 @@ class AdoptingPreprocessor(Component):
             return text_features, labels_batch, topic_token_dict_batch, token_dict_batch
 
 
+@register('adopting_ind_preprocessor')
+class AdoptingIndPreprocessor(Component):
+    def __init__(self,
+                 vocab_file: str,
+                 do_lower_case: bool = True,
+                 max_seq_length: int = 512,
+                 return_tokens: bool = False,
+                 return_sent: bool = False,
+                 **kwargs) -> None:
+        self.max_seq_length = max_seq_length
+        self.return_tokens = return_tokens
+        self.re_tokenizer = re.compile(r"[\w']+|[^\w ]")
+        self.tokenizer = BertTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
+        special_tokens_dict = {'additional_special_tokens': ['<TEXT>', '<NER>', '</NER>', '<FREQ_TOPIC>', '</FREQ_TOPIC>']}
+        num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
+        self.morph = pymorphy2.MorphAnalyzer()
+        self.number = 0
+        self.return_sent = return_sent
+    
+    def __call__(self, text_batch, entities_batch, nouns_batch, nouns_inters_batch, topics_batch,
+                       topics_inters_batch, classes_batch, entities_sent_batch = None):
+        wordpiece_tokens_batch = []
+        if topics_batch is None:
+            topics_batch = [[] for _ in text_batch]
+        if entities_sent_batch is None:
+            entities_sent_batch = [[] for _ in text_batch]
+        
+        cls_labels = []
+        topic_token_dict_batch = []
+        token_dict_batch = []
+        found_inters_tokens_batch = []
+        label_add_tokens_batch = []
+        entity_sent_ind_batch = []
+        
+        topic_ind_batch, topic_labels_batch = [], []
+        token_ind_batch, token_labels_batch = [], []
+        
+        for text, entities, nouns, nouns_inters, entities_sent, topics, topics_inters, cls in \
+                zip(text_batch, entities_batch, nouns_batch, nouns_inters_batch, entities_sent_batch, topics_batch,
+                    topics_inters_batch, classes_batch):
+            cls_labels.append(cls)
+            ind = 1
+            entity_sent_ind_list = []
+            used_entities = set()
+            
+            topic_token_dict = {}
+            doc_wordpiece_tokens = []
+            
+            pos_topic_ind, neg_topic_ind = [], []
+            
+            if topics:
+                sp_tok_ind = []
+                
+                topic_tok_cnt = 0
+                doc_wordpiece_tokens.append("<FREQ_TOPIC>")
+                sp_tok_ind.append(ind)
+                ind += 1
+                topic_tok_cnt += 1
+                
+                freq_topics = []
+                rare_topics = []
+                topics = list(topics.items())
+                topics = sorted(topics, key=lambda x: x[1], reverse=True)
+                for topic, score in topics:
+                    if score > 0.05 and len(freq_topics) < 3:
+                        freq_topics.append(topic)
+                    else:
+                        rare_topics.append(topic)
+                
+                for freq_topic in freq_topics:
+                    word_tokens = self.tokenizer.tokenize(freq_topic)
+                    doc_wordpiece_tokens += word_tokens
+                    if freq_topic in topics_inters:
+                        for _ in word_tokens:
+                            pos_topic_ind.append(ind)
+                            ind += 1
+                    else:
+                        ind += len(word_tokens)
+                
+                    topic_token_dict[freq_topic] = []
+                    for _ in word_tokens:
+                        topic_token_dict[freq_topic].append(topic_tok_cnt)
+                        topic_tok_cnt += 1
+                    
+                doc_wordpiece_tokens.append("</FREQ_TOPIC>")
+                sp_tok_ind.append(ind)
+                ind += 1
+                topic_tok_cnt += 1
+                
+                for rare_topic in rare_topics:
+                    word_tokens = self.tokenizer.tokenize(rare_topic)
+                    doc_wordpiece_tokens += word_tokens
+                    if rare_topic in topics_inters:
+                        for _ in word_tokens:
+                            pos_topic_ind.append(ind)
+                            ind += 1
+                    else:
+                        ind += len(word_tokens)
+                    
+                    topic_token_dict[rare_topic] = []
+                    for _ in word_tokens:
+                        topic_token_dict[rare_topic].append(topic_tok_cnt)
+                        topic_tok_cnt += 1
+                        
+                for _ in range(len(pos_topic_ind)):
+                    while True:
+                        neg_ind = random.randint(2, 17)
+                        if neg_ind not in pos_topic_ind and neg_ind not in sp_tok_ind:
+                            neg_topic_ind.append(neg_ind)
+                            break
+            
+            token_dict = {}
+            entity_tok_cnt = 0
+            doc_wordpiece_tokens.append("<TEXT>")
+            ind += 1
+            entity_tok_cnt += 1
+            
+            entity_start_pos_list = []
+            entity_sent_start_pos_list = []
+            entity_end_pos_list = []
+            
+            noun_inters_pos_list = []
+            
+            pos_token_ind, neg_token_ind = [], []
+            
+            text_tokens = re.findall(self.re_tokenizer, text)
+            for entity in entities:
+                entity_tokens = re.findall(self.re_tokenizer, entity)
+                for i in range(len(text_tokens) - len(entity_tokens)):
+                    matches = 0
+                    for j in range(len(entity_tokens)):
+                        if text_tokens[(i + j)].lower() == entity_tokens[j].lower():
+                            matches += 1
+                    if matches == len(entity_tokens):
+                        entity_start_pos_list.append(i)
+                        if entity in entities_sent and entity not in used_entities:
+                            entity_sent_start_pos_list.append(i)
+                            used_entities.add(entity)
+                        entity_end_pos_list.append(i + len(entity_tokens))
+            
+            text_tokens = re.findall(self.re_tokenizer, text)
+            for noun in nouns:
+                noun_tokens = re.findall(self.re_tokenizer, noun)
+                for i in range(len(text_tokens) - len(noun_tokens)):
+                    matches = 0
+                    for j in range(len(noun_tokens)):
+                        if text_tokens[(i + j)].lower() == noun_tokens[j].lower():
+                            matches += 1
+                    if matches == len(noun_tokens):
+                        noun_inters_pos_list.append((i, i + len(noun_tokens)))
+            
+            found_inters_tokens = []
+            entity_inters_pos_list = []
+            text_tokens = re.findall(self.re_tokenizer, text)
+            for entity in nouns_inters:
+                entity_tokens = re.findall(self.re_tokenizer, entity)
+                for i in range(len(text_tokens) - len(entity_tokens)):
+                    matches = 0
+                    for j in range(len(entity_tokens)):
+                        if text_tokens[(i + j)].lower() == entity_tokens[j].lower():
+                            matches += 1
+                        elif text_tokens[(i + j)].lower()[:3] == entity_tokens[j].lower()[:3] and \
+                                self.morph.parse(text_tokens[(i + j)].lower())[0].normal_form == self.morph.parse(entity_tokens[j].lower())[0].normal_form:
+                            matches += 1
+                    if matches == len(entity_tokens):
+                        entity_inters_pos_list.append((i, i + len(entity_tokens)))
+                        found_inters_tokens.append(text_tokens[i:i+len(entity_tokens)])
+            found_inters_tokens_batch.append(found_inters_tokens)
+            
+            label_add_tokens = []
+            for i in range(len(text_tokens)):
+                if i in entity_start_pos_list:
+                    doc_wordpiece_tokens.append("<NER>")
+                    ind += 1
+                    entity_tok_cnt += 1
+                elif i in entity_end_pos_list:
+                    doc_wordpiece_tokens.append("</NER>")
+                    ind += 1
+                    entity_tok_cnt += 1
+                if i in entity_sent_start_pos_list and len(doc_wordpiece_tokens) < 485:
+                    entity_sent_ind_list.append(len(doc_wordpiece_tokens))
+                word_tokens = self.tokenizer.tokenize(text_tokens[i])
+                found_entity_inters = False
+                for entity_inters_pos in entity_inters_pos_list:
+                    if i >= entity_inters_pos[0] and i < entity_inters_pos[1]:
+                        found_entity_inters = True
+                        break
+                
+                found_entity_not_inters = False
+                for entity_not_inters_pos in noun_inters_pos_list:
+                    if i >= entity_not_inters_pos[0] and i < entity_not_inters_pos[1]:
+                        found_entity_not_inters = True
+                        break
+                if found_entity_inters:
+                    for _ in word_tokens:
+                        pos_token_ind.append(ind)
+                        ind += 1
+                    label_add_tokens.append(word_tokens)
+                elif found_entity_not_inters:
+                    for _ in word_tokens:
+                        neg_token_ind.append(ind)
+                        ind += 1
+                else:
+                    ind += len(word_tokens)
+                
+                doc_wordpiece_tokens += word_tokens
+                
+                token_dict[text_tokens[i]] = token_dict.get(text_tokens[i], [])
+                for _ in word_tokens:
+                    token_dict[text_tokens[i]].append(entity_tok_cnt)
+                    entity_tok_cnt += 1
+                
+            pos_token_ind = sorted(list(set(pos_token_ind)))
+            neg_token_ind = sorted(list(set(neg_token_ind)))
+            if len(pos_token_ind) > len(neg_token_ind):
+                pos_token_ind = pos_token_ind[:len(neg_token_ind)]
+            else:
+                neg_token_ind = neg_token_ind[:len(pos_token_ind)]
+                    
+            label_add_tokens_batch.append(label_add_tokens)
+            doc_wordpiece_tokens.append("<TEXT>")
+            
+            wordpiece_tokens_batch.append(doc_wordpiece_tokens)
+            token_dict_batch.append(token_dict)
+            topic_token_dict_batch.append(topic_token_dict)
+            entity_sent_ind_batch.append(entity_sent_ind_list)
+            
+            topic_ind_labels = [(ind_t, 1) for ind_t in pos_topic_ind if ind_t < 485] + \
+                               [(ind_t, 0) for ind_t in neg_topic_ind if ind_t < 485]
+            token_ind_labels = [(ind_t, 1) for ind_t in pos_token_ind if ind_t < 485] + \
+                               [(ind_t, 0) for ind_t in neg_token_ind if ind_t < 485]
+            topic_ind_labels = sorted(topic_ind_labels, key=lambda x: x[0])
+            token_ind_labels = sorted(token_ind_labels, key=lambda x: x[0])
+            topic_ind = [elem[0] for elem in topic_ind_labels]
+            topic_labels = [elem[1] for elem in topic_ind_labels]
+            token_ind = [elem[0] for elem in token_ind_labels]
+            token_labels = [elem[1] for elem in token_ind_labels]
+            
+            topic_ind_batch.append(topic_ind)
+            topic_labels_batch.append(topic_labels)
+            token_ind_batch.append(token_ind)
+            token_labels_batch.append(token_labels)
+        
+        max_len = max([len(elem) for elem in wordpiece_tokens_batch]) + 2
+        input_ids_batch = []
+        attention_mask_batch = []
+        token_type_ids_batch = []
+        
+        #out = open("log_wordpiece.txt", 'a')
+        #for wordpiece_tokens, token_inds, token_labels, token_ind_dict in \
+        #        zip(wordpiece_tokens_batch, token_ind_batch, token_labels_batch, token_dict_batch):
+        #    out.write(str(token_inds)+'\n')
+        #    out.write(str(token_labels)+'\n')
+        #    out.write(str(wordpiece_tokens[18:])+'\n')
+        #    found_tokens = []
+        #    for ind in token_inds:
+        #        found_tok = ""
+        #        for tok in token_ind_dict:
+        #            if ind - 19 in token_ind_dict[tok] and tok not in found_tokens:
+        #                found_tok = tok
+        #                break
+        #        found_tokens.append([found_tok, wordpiece_tokens[ind - 1]])
+        #    out.write(f"found_tokens {found_tokens}"+'\n')
+        #    out.write("_"*60+'\n\n')
+        #out.close()
+            
+        for wordpiece_tokens in wordpiece_tokens_batch:
+            encoding = self.tokenizer.encode_plus(wordpiece_tokens, add_special_tokens = True,
+                                                  truncation = True, max_length=max_len,
+                                                  pad_to_max_length=True, return_attention_mask = True)
+            input_ids_batch.append(encoding["input_ids"][:490])
+            attention_mask_batch.append(encoding["attention_mask"][:490])
+            token_type_ids_batch.append(encoding["token_type_ids"][:490])
+            
+        text_features = {"input_ids": input_ids_batch,
+                         "attention_mask": attention_mask_batch,
+                         "token_type_ids": token_type_ids_batch}
+            
+        return cls_labels, text_features, topic_ind_batch, topic_labels_batch, token_ind_batch, token_labels_batch, \
+            topic_token_dict_batch, token_dict_batch, entity_sent_ind_batch
+
+
+@register('adopting_ind_infer_preprocessor')
+class AdoptingIndInferPreprocessor(Component):
+    def __init__(self,
+                 vocab_file: str,
+                 do_lower_case: bool = True,
+                 max_seq_length: int = 512,
+                 return_tokens: bool = False,
+                 return_sent: bool = False,
+                 **kwargs) -> None:
+        self.max_seq_length = max_seq_length
+        self.return_tokens = return_tokens
+        self.re_tokenizer = re.compile(r"[\w']+|[^\w ]")
+        self.tokenizer = BertTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
+        special_tokens_dict = {'additional_special_tokens': ['<TEXT>', '<NER>', '</NER>', '<FREQ_TOPIC>', '</FREQ_TOPIC>']}
+        num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
+        self.morph = pymorphy2.MorphAnalyzer()
+        self.number = 0
+        self.return_sent = return_sent
+    
+    def __call__(self, text_batch, entities_batch, nouns_batch, nouns_inters_batch, topics_batch, entities_sent_batch = None):
+        wordpiece_tokens_batch = []
+        if topics_batch is None:
+            topics_batch = [[] for _ in text_batch]
+        if entities_sent_batch is None:
+            entities_sent_batch = [[] for _ in text_batch]
+        
+        topic_token_dict_batch = []
+        token_dict_batch = []
+        found_inters_tokens_batch = []
+        label_add_tokens_batch = []
+        entity_sent_ind_batch = []
+        
+        topic_ind_batch = []
+        token_ind_batch = []
+        
+        for text, entities, nouns, nouns_inters, entities_sent, topics in \
+                zip(text_batch, entities_batch, nouns_batch, nouns_inters_batch, entities_sent_batch, topics_batch):
+            ind = 1
+            entity_sent_ind_list = []
+            used_entities = set()
+            
+            topic_token_dict = {}
+            doc_wordpiece_tokens = []
+            
+            all_topic_ind = []
+            freq_topics, rare_topics = [], []
+            
+            if topics:
+                sp_tok_ind = []
+                
+                topic_tok_cnt = 0
+                doc_wordpiece_tokens.append("<FREQ_TOPIC>")
+                sp_tok_ind.append(ind)
+                ind += 1
+                topic_tok_cnt += 1
+                
+                topics = list(topics.items())
+                topics = sorted(topics, key=lambda x: x[1], reverse=True)
+                for topic, score in topics:
+                    if score > 0.05 and len(freq_topics) < 3:
+                        freq_topics.append(topic)
+                    else:
+                        rare_topics.append(topic)
+                
+                for freq_topic in freq_topics:
+                    word_tokens = self.tokenizer.tokenize(freq_topic)
+                    doc_wordpiece_tokens += word_tokens
+                    for _ in word_tokens:
+                        all_topic_ind.append(ind)
+                        ind += 1
+                
+                    topic_token_dict[freq_topic] = []
+                    for _ in word_tokens:
+                        topic_token_dict[freq_topic].append(topic_tok_cnt)
+                        topic_tok_cnt += 1
+                    
+                doc_wordpiece_tokens.append("</FREQ_TOPIC>")
+                sp_tok_ind.append(ind)
+                ind += 1
+                topic_tok_cnt += 1
+                
+                for rare_topic in rare_topics:
+                    word_tokens = self.tokenizer.tokenize(rare_topic)
+                    doc_wordpiece_tokens += word_tokens
+                    for _ in word_tokens:
+                        all_topic_ind.append(ind)
+                        ind += 1
+                    
+                    topic_token_dict[rare_topic] = []
+                    for _ in word_tokens:
+                        topic_token_dict[rare_topic].append(topic_tok_cnt)
+                        topic_tok_cnt += 1
+            
+            token_dict = {}
+            entity_tok_cnt = 0
+            doc_wordpiece_tokens.append("<TEXT>")
+            ind += 1
+            entity_tok_cnt += 1
+            
+            entity_start_pos_list = []
+            entity_sent_start_pos_list = []
+            entity_end_pos_list = []
+            
+            noun_inters_pos_list = []
+            
+            pos_token_ind, neg_token_ind = [], []
+            
+            text_tokens = re.findall(self.re_tokenizer, text)
+            for entity in entities:
+                entity_tokens = re.findall(self.re_tokenizer, entity)
+                for i in range(len(text_tokens) - len(entity_tokens)):
+                    matches = 0
+                    for j in range(len(entity_tokens)):
+                        if text_tokens[(i + j)].lower() == entity_tokens[j].lower():
+                            matches += 1
+                    if matches == len(entity_tokens):
+                        entity_start_pos_list.append(i)
+                        if entity in entities_sent and entity not in used_entities:
+                            entity_sent_start_pos_list.append(i)
+                            used_entities.add(entity)
+                        entity_end_pos_list.append(i + len(entity_tokens))
+            
+            text_tokens = re.findall(self.re_tokenizer, text)
+            for noun in nouns:
+                noun_tokens = re.findall(self.re_tokenizer, noun)
+                for i in range(len(text_tokens) - len(noun_tokens)):
+                    matches = 0
+                    for j in range(len(noun_tokens)):
+                        if text_tokens[(i + j)].lower() == noun_tokens[j].lower():
+                            matches += 1
+                    if matches == len(noun_tokens):
+                        noun_inters_pos_list.append((i, i + len(noun_tokens)))
+            
+            found_inters_tokens = []
+            entity_inters_pos_list = []
+            text_tokens = re.findall(self.re_tokenizer, text)
+            for entity in nouns_inters:
+                entity_tokens = re.findall(self.re_tokenizer, entity)
+                for i in range(len(text_tokens) - len(entity_tokens)):
+                    matches = 0
+                    for j in range(len(entity_tokens)):
+                        if text_tokens[(i + j)].lower() == entity_tokens[j].lower():
+                            matches += 1
+                        elif text_tokens[(i + j)].lower()[:3] == entity_tokens[j].lower()[:3] and \
+                                self.morph.parse(text_tokens[(i + j)].lower())[0].normal_form == self.morph.parse(entity_tokens[j].lower())[0].normal_form:
+                            matches += 1
+                    if matches == len(entity_tokens):
+                        entity_inters_pos_list.append((i, i + len(entity_tokens)))
+                        found_inters_tokens.append(text_tokens[i:i+len(entity_tokens)])
+            found_inters_tokens_batch.append(found_inters_tokens)
+            
+            label_add_tokens = []
+            for i in range(len(text_tokens)):
+                if i in entity_start_pos_list:
+                    doc_wordpiece_tokens.append("<NER>")
+                    ind += 1
+                    entity_tok_cnt += 1
+                elif i in entity_end_pos_list:
+                    doc_wordpiece_tokens.append("</NER>")
+                    ind += 1
+                    entity_tok_cnt += 1
+                if i in entity_sent_start_pos_list and len(doc_wordpiece_tokens) < 485:
+                    entity_sent_ind_list.append(len(doc_wordpiece_tokens))
+                word_tokens = self.tokenizer.tokenize(text_tokens[i])
+                found_entity_inters = False
+                for entity_inters_pos in entity_inters_pos_list:
+                    if i >= entity_inters_pos[0] and i < entity_inters_pos[1]:
+                        found_entity_inters = True
+                        break
+                
+                found_entity_not_inters = False
+                for entity_not_inters_pos in noun_inters_pos_list:
+                    if i >= entity_not_inters_pos[0] and i < entity_not_inters_pos[1]:
+                        found_entity_not_inters = True
+                        break
+                if found_entity_inters:
+                    for _ in word_tokens:
+                        pos_token_ind.append(ind)
+                        ind += 1
+                    label_add_tokens.append(word_tokens)
+                elif found_entity_not_inters:
+                    for _ in word_tokens:
+                        neg_token_ind.append(ind)
+                        ind += 1
+                else:
+                    ind += len(word_tokens)
+                
+                doc_wordpiece_tokens += word_tokens
+                
+                token_dict[text_tokens[i]] = token_dict.get(text_tokens[i], [])
+                for _ in word_tokens:
+                    token_dict[text_tokens[i]].append(entity_tok_cnt)
+                    entity_tok_cnt += 1
+                
+            pos_token_ind = sorted(list(set(pos_token_ind)))
+            neg_token_ind = sorted(list(set(neg_token_ind)))
+            if len(pos_token_ind) > len(neg_token_ind):
+                pos_token_ind = pos_token_ind[:len(neg_token_ind)]
+            else:
+                neg_token_ind = neg_token_ind[:len(pos_token_ind)]
+                    
+            label_add_tokens_batch.append(label_add_tokens)
+            doc_wordpiece_tokens.append("<TEXT>")
+            
+            wordpiece_tokens_batch.append(doc_wordpiece_tokens)
+            token_dict_batch.append(token_dict)
+            topic_token_dict_batch.append(topic_token_dict)
+            entity_sent_ind_batch.append(entity_sent_ind_list)
+            
+            topic_ind_labels = [(ind_t, 1) for ind_t in all_topic_ind if ind_t < 485]
+            token_ind_labels = [(ind_t, 1) for ind_t in pos_token_ind if ind_t < 485] + \
+                               [(ind_t, 0) for ind_t in neg_token_ind if ind_t < 485]
+            topic_ind_labels = sorted(topic_ind_labels, key=lambda x: x[0])
+            token_ind_labels = sorted(token_ind_labels, key=lambda x: x[0])
+            topic_ind = [elem[0] for elem in topic_ind_labels]
+            token_ind = [elem[0] for elem in token_ind_labels]
+            
+            topic_ind_batch.append(topic_ind)
+            token_ind_batch.append(token_ind)
+        
+        max_len = max([len(elem) for elem in wordpiece_tokens_batch]) + 2
+        input_ids_batch = []
+        attention_mask_batch = []
+        token_type_ids_batch = []
+            
+        for wordpiece_tokens in wordpiece_tokens_batch:
+            encoding = self.tokenizer.encode_plus(wordpiece_tokens, add_special_tokens = True,
+                                                  truncation = True, max_length=max_len,
+                                                  pad_to_max_length=True, return_attention_mask = True)
+            input_ids_batch.append(encoding["input_ids"][:490])
+            attention_mask_batch.append(encoding["attention_mask"][:490])
+            token_type_ids_batch.append(encoding["token_type_ids"][:490])
+            
+        text_features = {"input_ids": input_ids_batch,
+                         "attention_mask": attention_mask_batch,
+                         "token_type_ids": token_type_ids_batch}
+            
+        return text_features, topic_ind_batch, token_ind_batch, \
+            topic_token_dict_batch, token_dict_batch, entity_sent_ind_batch
+
+
 @register('adopting_infer_preprocessor')
 class AdoptingInferPreprocessor(Component):
     def __init__(self,
@@ -692,7 +1215,6 @@ class CopyDefinePostprocessor(Component):
         model_output_batch = []
         for class_pred, topic_ind_list, token_ind_list, topic_token_dict, token_dict, sent_pred in \
                 zip(class_pred_batch, topic_ind_batch, token_ind_batch, topic_token_dict_batch, token_dict_batch, sent_pred_batch):
-            print("topic_token_dict", topic_token_dict)
             topics = []
             nouns = []
             if class_pred == 1:
@@ -742,6 +1264,45 @@ class CopyDefineInferPostprocessor(Component):
                 probs_dict = sorted(probs_dict, key=lambda x: x[1], reverse=True)
                 
                 topics = [elem[0] for elem in probs_dict[:len(freq_topics)]]
+                topics = [topic for topic in topics if topics_with_probs[topic] > 0.01]
+                
+                for token_ind in token_ind_list:
+                    for token, ind_list in token_dict.items():
+                        if token_ind in ind_list and self.morph.parse(token)[0].tag.POS == "NOUN":
+                            nouns.append(token)
+                            break
+            else:
+                copy_conf = 1.0 - copy_conf
+            model_output = (copy_pred, copy_conf, topics, nouns, sent_pred)
+            model_output_batch.append(model_output)
+        return model_output_batch
+
+
+@register('copy_define_ind_infer_postprocessor')
+class CopyDefineIndInferPostprocessor(Component):
+    def __init__(self, **kwargs) -> None:
+        self.morph = pymorphy2.MorphAnalyzer()
+    
+    def __call__(self, copy_pred_batch, copy_conf_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch,
+                       topic_token_dict_batch, token_dict_batch, sent_pred_batch):
+        model_output_batch = []
+        for copy_pred, copy_conf, topic_pred_list, topics_with_probs, token_ind_list, topic_token_dict, token_dict, \
+                sent_pred in \
+                zip(copy_pred_batch, copy_conf_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch,
+                    topic_token_dict_batch, token_dict_batch, sent_pred_batch):
+            topics = []
+            nouns = []
+            if copy_pred == 1:
+                probs_dict = {}
+                for ind in topic_pred_list:
+                    for topic, topic_indices in topic_token_dict.items():
+                        if ind in topic_indices:
+                            probs_dict[topic] = topics_with_probs[topic]
+                
+                probs_list = list(probs_dict.items())
+                probs_list = sorted(probs_list, key=lambda x: x[1], reverse=True)
+                
+                topics = [elem[0] for elem in probs_list[:3]]
                 topics = [topic for topic in topics if topics_with_probs[topic] > 0.01]
                 
                 for token_ind in token_ind_list:
