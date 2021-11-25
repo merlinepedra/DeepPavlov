@@ -106,7 +106,8 @@ class WikidataParser:
         Method for parallel processing of lines from Wikidata file
         """
         cur_wiki_dict = {}
-        for line in lines_list:
+        for n, line in enumerate(lines_list):
+            log.info(f"{num_proc} {n} parsed")
             line = line[:-2]
             entity_id = ""
             try:
