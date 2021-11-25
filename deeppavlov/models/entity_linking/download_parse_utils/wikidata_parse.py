@@ -160,6 +160,8 @@ class WikidataParser:
                 if count == self.chunk_num_lines * self.num_processors:
                     log.info(f"parsed lines {round(100*parsed_lines/self.total_lines_num)}")
                     break
+                if count % 50 == 0:
+                    log.info(f"{count} {self.chunk_num_lines * self.num_processors}")
             
             if not common_list:
                 break
