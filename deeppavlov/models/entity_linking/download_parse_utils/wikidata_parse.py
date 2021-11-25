@@ -120,7 +120,7 @@ class WikidataParser:
             if entity_id:
                 cur_wiki_list.append((entity_id, entity_info))
         log.info(f"{num_proc}, finished parsing")
-        self.wiki_dict[num_proc] = cur_wiki_dict
+        self.wiki_dict[num_proc] = cur_wiki_list
         log.info(f"{num_proc}, added to wiki dict")
                      
 
