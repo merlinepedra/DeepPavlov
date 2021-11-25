@@ -26,7 +26,7 @@ class WikidataParser:
                  log_path: str = "~/.deeppavlov/downloads/wikidata_parse_logs",
                  log_parse_errors: str = "log_parse_errors.txt",
                  log_parse_progress: str = "log_parse_progress.txt",
-                 num_processors=None):
+                 num_processors=4):
 
         self.wikidata_filename = wikidata_filename
         self.chunk_num_lines = chunk_num_lines
@@ -47,7 +47,7 @@ class WikidataParser:
             self.num_processors = mp.cpu_count()
         else:
             self.num_processors = num_processors
-        log.debug(f"number of processors {self.num_processors}")
+        log.info(f"number of processors {self.num_processors}")
         self.wiki_dict = self.manager.dict()
         self.bz_file = bz2.BZ2File(self.wikidata_filename)
 
@@ -125,7 +125,8 @@ class WikidataParser:
         Method for parsing of Wikidata file
         """
         line = self.bz_file.readline()
-
+        log.debug("parse function started")
+        
         parsed_lines = 0
         num_iterations = 0
         if continue_parsing:
@@ -145,7 +146,7 @@ class WikidataParser:
                 parsed_lines += 1
 
         while True:
-            log.debug(f"iteration number {num_iterations}")
+            log.info(f"iteration number {num_iterations}")
             self.log_to_file("iteration number", num_iterations, self.log_parse_progress)
             self.wiki_dict = self.manager.dict()
             common_list = []
