@@ -121,26 +121,26 @@ class CopyDefineModelInd(TorchModel):
             copy_or_not_conf, _ = torch.max(cls_softmax_scores, dim=1)
             copy_or_not = copy_or_not.cpu().numpy()
             copy_or_not_conf = copy_or_not_conf.cpu().numpy()
-            topic_preds = torch.argmax(topic_softmax_scores, dim=2).cpu().numpy().tolist()
-            #out = open("topic_log.txt", 'a')
-            #out.write(str(topic_preds)+'\n')
-            #out.write("_"*60+'\n')
-            #out.close()
-            token_preds = torch.argmax(token_softmax_scores, dim=2).cpu().numpy().tolist()
-            for topic_ind, topic_pred in zip(topic_inds, topic_preds):
-                copy_topic_ind = []
-                for i in range(len(topic_ind)):
-                    if topic_pred[i] == 1:
-                        copy_topic_ind.append(topic_ind[i] - 1)
-                copy_topic_inds.append(copy_topic_ind)
             
-            
-            for token_ind, token_pred in zip(token_inds, token_preds):
-                copy_token_ind = []
-                for i in range(len(token_ind)):
-                    if token_pred[i] == 1:
-                        copy_token_ind.append(token_ind[i] - 19)
-                copy_token_inds.append(copy_token_ind)
+            if topic_softmax_scores and token_softmax_scores:
+                topic_preds = torch.argmax(topic_softmax_scores, dim=2).cpu().numpy().tolist()
+                token_preds = torch.argmax(token_softmax_scores, dim=2).cpu().numpy().tolist()
+                for topic_ind, topic_pred in zip(topic_inds, topic_preds):
+                    copy_topic_ind = []
+                    for i in range(len(topic_ind)):
+                        if topic_pred[i] == 1:
+                            copy_topic_ind.append(topic_ind[i] - 1)
+                    copy_topic_inds.append(copy_topic_ind)
+                
+                for token_ind, token_pred in zip(token_inds, token_preds):
+                    copy_token_ind = []
+                    for i in range(len(token_ind)):
+                        if token_pred[i] == 1:
+                            copy_token_ind.append(token_ind[i] - 19)
+                    copy_token_inds.append(copy_token_ind)
+            else:
+                copy_topic_inds = [[] for _ in source_ids]
+                copy_token_inds = [[] for _ in source_ids]
             
         if isinstance(sent_softmax_scores, list) and not sent_softmax_scores:
             sent_softmax_scores = [[] for _ in source_ids]
@@ -273,6 +273,7 @@ class CopyDefineNetwork(nn.Module):
         
         # _______________________________________________________________________________
         
+        print("topic_inds", topic_inds)
         topics_batch = []
         for i in range(bs):
             topics_list = []
@@ -283,6 +284,7 @@ class CopyDefineNetwork(nn.Module):
         
         topic_att_mask_batch = []
         max_topic_len = max([len(elem) for elem in topics_batch])
+        print("max_topic_len", max_topic_len, "topics_batch", topics_batch)
         
         if max_topic_len > 0:
             for i in range(bs):
@@ -298,12 +300,6 @@ class CopyDefineNetwork(nn.Module):
                 topic_att_mask_batch.append(topic_att_mask)
                     
             topics_batch = torch.stack(topics_batch, dim=0).to(self.device)
-            #if topic_labels is not None:
-            #    print("topics_batch", topics_batch)
-            #    for topic_att_mask, topic_label in zip(topic_att_mask_batch, topic_labels):
-            #        print("topic_att_mask", topic_att_mask)
-            #        print("topic_label", topic_label)
-            #        print("_"*50)
         
         # _______________________________________________________________________________
         
@@ -331,12 +327,6 @@ class CopyDefineNetwork(nn.Module):
                 tokens_batch[i] = torch.stack(tokens_batch[i], dim=0)
                 token_att_mask_batch.append(token_att_mask)
             tokens_batch = torch.stack(tokens_batch, dim=0).to(self.device)
-            #if token_labels is not None:
-            #    print("tokens_batch", tokens_batch)
-            #    for token_att_mask, token_label in zip(token_att_mask_batch, token_labels):
-            #        print("token_att_mask", token_att_mask)
-            #        print("token_label", token_label)
-            #        print("_"*50)
         
         cls_hidden = hidden_states[:, :1, :]
         
@@ -345,8 +335,6 @@ class CopyDefineNetwork(nn.Module):
         
         cls_hidden = torch.squeeze(cls_hidden, 1)
         cls_hidden = cls_hidden.view(-1, 96, 8)
-        topic_hidden = topics_batch.view(bs, -1, 96, 8)
-        token_hidden = tokens_batch.view(bs, -1, 96, 8)
         if max_entities_sent_len > 0:
             entities_sent_batch = entities_sent_batch.view(bs, -1, 96, 8)
         
@@ -355,13 +343,19 @@ class CopyDefineNetwork(nn.Module):
         cls_logits = torch.squeeze(cls_logits, dim=1)
         cls_logits = F.softmax(cls_logits, 1)
         
-        bl_topic = (domain_embs1.unsqueeze(4) * topic_hidden.unsqueeze(3)).view(bs, -1, 768 * 8)
-        topic_logits = self.bilinear_topic(bl_topic)
-        topic_logits = F.softmax(topic_logits, 2)
+        topic_logits = []
+        if topics_batch and topics_batch[0]:
+            topic_hidden = topics_batch.view(bs, -1, 96, 8)
+            bl_topic = (domain_embs1.unsqueeze(4) * topic_hidden.unsqueeze(3)).view(bs, -1, 768 * 8)
+            topic_logits = self.bilinear_topic(bl_topic)
+            topic_logits = F.softmax(topic_logits, 2)
         
-        bl_token = (domain_embs1.unsqueeze(4) * token_hidden.unsqueeze(3)).view(bs, -1, 768 * 8)
-        token_logits = self.bilinear_token(bl_token)
-        token_logits = F.softmax(token_logits, 2)
+        token_logits = []
+        if tokens_batch and tokens_batch[0]:
+            token_hidden = tokens_batch.view(bs, -1, 96, 8)
+            bl_token = (domain_embs1.unsqueeze(4) * token_hidden.unsqueeze(3)).view(bs, -1, 768 * 8)
+            token_logits = self.bilinear_token(bl_token)
+            token_logits = F.softmax(token_logits, 2)
         
         if max_entities_sent_len > 0:
             bl_sent = (domain_embs1.unsqueeze(4) * entities_sent_batch.unsqueeze(3)).view(bs, -1, 768 * 8)
