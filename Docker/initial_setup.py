@@ -1,14 +1,14 @@
 from pathlib import Path
-import shutil
+from shutil import copytree
+
+from deeppavlov.core.commands.utils import parse_config
 
 
 def initial_setup():
-    init_model_path = "/data/models/ner_rus_distilbert_torch_init"
-    base_model_path = "/data/models/ner_rus_distilbert_torch"
-    model_filename = "/data/models/ner_rus_distilbert_torch/model.pth.tar"
-    init_model_filename = "/data/models/ner_rus_distilbert_torch_init/model.pth.tar"
-    init_tags_filename = "/data/models/ner_rus_distilbert_torch_init/tag.dict"
-
-    if not Path(model_filename).exists():
-        shutil.copy(init_model_filename, base_model_path)
-        shutil.copy(init_tags_filename, base_model_path)
+    config = parse_config('ner_rus_vx_distil.json')
+    model_path = config['metadata']['variables']['NER_PATH']
+    init_path = next(
+        i for i in config['metadata']['download'] if 'ner_rus_distilbert_torch.tar.gz' in i['url']
+    )['subdir']
+    if not Path(model_path).exists():
+        copytree(init_path, model_path)

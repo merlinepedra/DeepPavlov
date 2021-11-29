@@ -5,14 +5,14 @@ import shutil
 import threading
 from logging import getLogger
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import pandas as pd
 import torch
 import uvicorn
 from fastapi import FastAPI, File, UploadFile
+from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
-from starlette.requests import Request
 
 from deeppavlov import build_model, train_model, evaluate_model, deep_download
 from deeppavlov.core.commands.utils import parse_config, expand_path
@@ -40,15 +40,17 @@ initial_setup()
 entity_detection = build_model(entity_detection_config, download=False)
 
 
+class Payload(BaseModel):
+    x: List[str]
+
+
 @app.post("/model")
-async def model(request: Request):
-    inp = await request.json()
-    texts = inp["x"]
+async def model(payload: Payload):
     entity_substr, entity_lemm_substr, entity_offsets, entity_init_offsets, tags, sentences_offsets, \
-        sentences, probas = entity_detection(texts)
+        sentences, probas, status = entity_detection(payload.x)
     res = {"entity_substr": entity_substr, "entity_lemm_substr": entity_lemm_substr,
            "entity_offsets": entity_offsets, "entity_init_offsets": entity_init_offsets, "tags": tags,
-           "sentences_offsets": sentences_offsets, "sentences": sentences, "probas": probas}
+           "sentences_offsets": sentences_offsets, "sentences": sentences, "probas": probas, "status": status}
     return res
 
 
