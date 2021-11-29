@@ -318,10 +318,12 @@ class NerChunkModel(Component):
         tags_batch_list = []
         entity_probas_batch_list = []
         text_len_batch_list = []
+        status_batch = []
         for text_batch, sentences_offsets_batch, sentences_batch in \
                 zip(text_batch_list, sentences_offsets_batch_list, sentences_batch_list):
             tm_ner_st = time.time()
             text_batch = [text.replace("\xad", " ") for text in text_batch]
+            status = "ok"
             try:
                 ner_tokens_batch, ner_tokens_offsets_batch, ner_probas_batch, probas_batch = self.ner(text_batch)
                 entity_substr_batch, entity_positions_batch, entity_probas_batch = \
@@ -330,6 +332,7 @@ class NerChunkModel(Component):
                 entity_substr_batch = [{} for _ in text_batch]
                 entity_positions_batch = [{} for _ in text_batch]
                 entity_probas_batch = [{} for _ in text_batch]
+                status = "error"
             
             tm_ner_end = time.time()
             log.debug(f"ner time {tm_ner_end - tm_ner_st}")
@@ -370,17 +373,18 @@ class NerChunkModel(Component):
             entity_offsets_batch_list.append(entity_offsets_batch)
             entity_probas_batch_list.append(probas_batch)
             text_len_batch_list.append([len(text) for text in text_batch])
+            status_batch.append(status)
 
         doc_entity_substr_batch, doc_tags_batch, doc_entity_offsets_batch, doc_probas_batch = [], [], [], []
-        doc_sentences_offsets_batch, doc_sentences_batch = [], []
+        doc_sentences_offsets_batch, doc_sentences_batch, doc_status_batch = [], [], []
         doc_entity_substr, doc_tags, doc_probas, doc_entity_offsets = [], [], [], []
         doc_sentences_offsets, doc_sentences = [], []
         cur_doc_num = 0
         text_len_sum = 0
         for entity_substr_batch, tags_batch, probas_batch, entity_offsets_batch, sentences_offsets_batch, \
-            sentences_batch, text_len_batch, nums_batch in \
+            sentences_batch, text_len_batch, nums_batch, status in \
                 zip(entity_substr_batch_list, tags_batch_list, entity_probas_batch_list, entity_offsets_batch_list,
-                    sentences_offsets_batch_list, sentences_batch_list, text_len_batch_list, nums_batch_list):
+                    sentences_offsets_batch_list, sentences_batch_list, text_len_batch_list, nums_batch_list, status_batch):
             for entity_substr_list, tag_list, probas_list, entity_offsets_list, sentences_offsets_list, sentences_list, text_len, doc_num in \
                     zip(entity_substr_batch, tags_batch, probas_batch, entity_offsets_batch, sentences_offsets_batch,
                         sentences_batch, text_len_batch, nums_batch):
@@ -394,6 +398,7 @@ class NerChunkModel(Component):
                                               for start_offset, end_offset in sentences_offsets_list]
                     doc_sentences += sentences_list
                     text_len_sum += text_len + 1
+                    cur_status = status
                 else:
                     doc_entity_substr_batch.append(doc_entity_substr)
                     doc_tags_batch.append(doc_tags)
@@ -401,6 +406,7 @@ class NerChunkModel(Component):
                     doc_entity_offsets_batch.append(doc_entity_offsets)
                     doc_sentences_offsets_batch.append(doc_sentences_offsets)
                     doc_sentences_batch.append(doc_sentences)
+                    doc_status_batch.append(cur_status)
                     doc_entity_substr = entity_substr_list
                     doc_tags = tag_list
                     doc_probas = probas_list
@@ -416,9 +422,10 @@ class NerChunkModel(Component):
         doc_entity_offsets_batch.append(doc_entity_offsets)
         doc_sentences_offsets_batch.append(doc_sentences_offsets)
         doc_sentences_batch.append(doc_sentences)
+        doc_status_batch.append(cur_status)
 
         return doc_entity_substr_batch, doc_entity_offsets_batch, doc_tags_batch, \
-               doc_sentences_offsets_batch, doc_sentences_batch, doc_probas_batch
+               doc_sentences_offsets_batch, doc_sentences_batch, doc_probas_batch, doc_status_batch
 
 
 @register('ner_postprocessor')
