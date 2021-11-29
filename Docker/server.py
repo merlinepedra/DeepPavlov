@@ -14,8 +14,9 @@ from fastapi import FastAPI, File, UploadFile
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 
-from deeppavlov import build_model, train_model, evaluate_model
+from deeppavlov import build_model, train_model, evaluate_model, deep_download
 from deeppavlov.core.commands.utils import parse_config, expand_path
+from initial_setup import initial_setup
 
 logger = getLogger(__file__)
 app = FastAPI()
@@ -32,7 +33,11 @@ app.add_middleware(
 metrics_filename = "/src/metrics_score_history.csv"
 ner_config = parse_config("ner_rus_distilbert_torch.json")
 entity_detection_config = parse_config("ner_rus_vx_distil.json")
-entity_detection = build_model(entity_detection_config, download=True)
+
+deep_download("ner_rus_vx_distil.json")
+initial_setup()
+
+entity_detection = build_model(entity_detection_config, download=False)
 
 
 @app.post("/model")
