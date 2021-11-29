@@ -16,7 +16,7 @@ from abc import abstractmethod
 from copy import deepcopy
 from logging import getLogger
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import torch
 from overrides import overrides
@@ -62,6 +62,7 @@ class TorchModel(NNModel):
     """
 
     def __init__(self, device: str = "gpu",
+                 devices: List[int] = None,
                  optimizer: str = "AdamW",
                  optimizer_parameters: Optional[dict] = None,
                  lr_scheduler: Optional[str] = None,
@@ -72,7 +73,11 @@ class TorchModel(NNModel):
                  min_learning_rate: float = 0.,
                  *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.device = torch.device("cuda" if torch.cuda.is_available() and device == "gpu" else "cpu")
+        self.devices = devices
+        if self.devices is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() and device == "gpu" else "cpu")
+        else:
+            self.device = torch.device(f"cuda:{self.devices[0]}")
         self.model = None
         self.optimizer = None
         self.lr_scheduler = None

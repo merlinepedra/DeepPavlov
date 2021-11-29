@@ -1,10 +1,12 @@
 {
   "dataset_reader": {
     "class_name": "in_batch_ranking_reader",
+    "valid_size": 400,
     "data_path": "{DOWNLOADS_PATH}/domains/domain_dataset_sent.pickle"
   },
   "dataset_iterator": {
-    "class_name": "copy_domain_iterator"
+    "class_name": "copy_domain_iterator",
+    "batch_size": 18
   },
   "chainer": {
     "in": ["source_id", "target_id", "text", "entities", "nouns", "topics", "entities_sent"],
@@ -31,7 +33,8 @@
         "model_name": "copy_define_model",
         "pretrained_bert": "{TRANSFORMER}",
         "learning_rate_drop_patience": 30,
-        "learning_rate_drop_div": 1.5
+        "learning_rate_drop_div": 1.5,
+        "devices": [0, 1, 2]
       },
       {
         "class_name": "copy_define_postprocessor",
@@ -43,7 +46,7 @@
   },
   "train": {
     "epochs": 50,
-    "batch_size": 10,
+    "batch_size": 18,
     "train_metrics": ["domain_acc", "topic_acc", "token_acc"],
     "metrics": ["domain_acc", "topic_acc", "token_acc"],
     "validation_patience": 100,
@@ -56,7 +59,7 @@
   },
   "metadata": {
     "variables": {
-      "ROOT_PATH": "~/.deeppavlov",
+      "ROOT_PATH": "/archive/evseev/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
       "TRANSFORMER": "DeepPavlov/rubert-base-cased",

@@ -22,13 +22,15 @@ from deeppavlov.core.data.dataset_reader import DatasetReader
 class InBatchRankingReader(DatasetReader):
     """Class to read training datasets in OntoNotes format"""
 
-    def read(self, data_path: str):
+    def read(self, data_path: str, train_size: int = None, valid_size: int = None):
         with open(data_path, 'rb') as f:
             dataset = pickle.load(f)
         
-        #dataset["train"] = dataset["train"][170000:]
-        #dataset["valid"] = dataset["valid"][:3000]
-        #dataset["test"] = dataset["test"][:3000]
+        if train_size is not None:
+            dataset["train"] = dataset["train"][:train_size]
+        if valid_size is not None:
+            dataset["valid"] = dataset["valid"][:valid_size]
+            dataset["test"] = dataset["test"][:valid_size]
 
         return dataset
 

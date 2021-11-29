@@ -31,7 +31,7 @@ class CopyDomainIterator(DataLearningIterator):
                  fields_to_merge: List[str] = None, merged_field: str = None,
                  field_to_split: str = None, split_fields: List[str] = None, split_proportions: List[float] = None,
                  seed: int = None, shuffle: bool = True, split_seed: int = None,
-                 stratify: bool = None,
+                 stratify: bool = None, batch_size: int = None,
                  *args, **kwargs):
         """
         Initialize dataset using data from DatasetReader,
@@ -39,7 +39,6 @@ class CopyDomainIterator(DataLearningIterator):
         """
         super().__init__(data, seed=seed, shuffle=shuffle)
         
-        batch_size = 10
         self.entity_samples = [elem for elem in self.data["train"] if elem[1][0] == 1]
         self.batches = {}
         train_batches = []

@@ -43,7 +43,7 @@ class CopyDefineModelInd(TorchModel):
             hidden_keep_prob: Optional[float] = None,
             clip_norm: Optional[float] = None,
             threshold: Optional[float] = None,
-            distributed: List[int] = None,
+            devices: List[int] = None,
             **kwargs
     ):
         self.encoder_save_path = encoder_save_path
@@ -54,6 +54,7 @@ class CopyDefineModelInd(TorchModel):
         self.attention_probs_keep_prob = attention_probs_keep_prob
         self.hidden_keep_prob = hidden_keep_prob
         self.clip_norm = clip_norm
+        self.devices = devices
 
         super().__init__(
             model_name=model_name,
@@ -61,6 +62,7 @@ class CopyDefineModelInd(TorchModel):
             criterion=criterion,
             optimizer_parameters=optimizer_parameters,
             return_probas=return_probas,
+            devices=self.devices,
             **kwargs)
 
     def train_on_batch(self, source_ids: List[int],
@@ -77,7 +79,6 @@ class CopyDefineModelInd(TorchModel):
         _input = {'source_ids': source_ids, 'target_ids': target_ids, 'entities_ind_sent': entities_ind_sent,
                   'topic_inds': topic_inds, 'token_inds': token_inds, 'cls_labels': cls_labels,
                   'topic_labels': topic_labels, 'token_labels': token_labels, 'sentiment': sentiment}
-        
         for elem in ['input_ids', 'attention_mask', 'token_type_ids']:
             _input[f"text_{elem}"] = torch.LongTensor(text_features[elem]).to(self.device)
         
@@ -112,7 +113,6 @@ class CopyDefineModelInd(TorchModel):
         
         for elem in ['input_ids', 'attention_mask', 'token_type_ids']:
             _input[f"text_{elem}"] = torch.LongTensor(text_features[elem]).to(self.device)
-
         copy_topic_inds = []
         copy_token_inds = []
         with torch.no_grad():
@@ -122,7 +122,8 @@ class CopyDefineModelInd(TorchModel):
             copy_or_not = copy_or_not.cpu().numpy()
             copy_or_not_conf = copy_or_not_conf.cpu().numpy()
             
-            if topic_softmax_scores and token_softmax_scores:
+            if (isinstance(topic_softmax_scores, torch.Tensor) and isinstance(token_softmax_scores, torch.Tensor)) or \
+                    (topic_softmax_scores and token_softmax_scores):
                 topic_preds = torch.argmax(topic_softmax_scores, dim=2).cpu().numpy().tolist()
                 token_preds = torch.argmax(token_softmax_scores, dim=2).cpu().numpy().tolist()
                 for topic_ind, topic_pred in zip(topic_inds, topic_preds):
@@ -156,23 +157,56 @@ class CopyDefineModelInd(TorchModel):
             pretrained_bert=self.pretrained_bert,
             encoder_save_path=self.encoder_save_path,
             emb_save_path=self.emb_save_path,
-            bert_tokenizer_config_file=self.pretrained_bert
+            bert_tokenizer_config_file=self.pretrained_bert,
+            devices=self.devices
         )
         
     def save(self, fname: Optional[str] = None, *args, **kwargs) -> None:
-        if fname is None:
-            fname = self.save_path
-        if not fname.parent.is_dir():
-            raise ConfigError("Provided save path is incorrect!")
-        weights_path = Path(fname).with_suffix(f".pth.tar")
-        log.info(f"Saving model to {weights_path}.")
-        torch.save({
-            "model_state_dict": self.model.cpu().state_dict(),
-            "optimizer_state_dict": self.optimizer.state_dict(),
-            "epochs_done": self.epochs_done
-        }, weights_path)
-        self.model.to(self.device)
         self.model.save()
+        
+    def load(self, fname: Optional[str] = None, *args, **kwargs) -> None:
+        model_func = getattr(self, self.opt.get("model_name"), None)
+        self.init_from_opt(model_func)
+        self.model.load()
+
+
+class TextEncoder(nn.Module):
+    def __init__(self, pretrained_bert: str = None,
+                 bert_tokenizer_config_file: str = None,
+                 bert_config_file: str = None,
+                 device: str = "gpu"
+                 ):
+        super().__init__()
+        self.pretrained_bert = pretrained_bert
+        self.bert_config_file = bert_config_file
+        self.encoder, self.config, self.bert_config = None, None, None
+        self.device = device
+        self.load()
+        tokenizer = BertTokenizer.from_pretrained(pretrained_bert)
+        self.encoder.resize_token_embeddings(len(tokenizer) + 5)
+        
+    def forward(self,
+                input_ids: Tensor,
+                attention_mask: Tensor,
+                token_type_ids: Tensor
+    ) -> Union[Tuple[Any, Tensor], Tuple[Tensor]]:
+
+        c_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
+        return c_outputs
+            
+    def load(self) -> None:
+        if self.pretrained_bert:
+            log.info(f"From pretrained {self.pretrained_bert}.")
+            self.config = AutoConfig.from_pretrained(
+                self.pretrained_bert, output_hidden_states=True
+            )
+            self.encoder = AutoModel.from_pretrained(self.pretrained_bert, config=self.config)
+
+        elif self.bert_config_file and Path(self.bert_config_file).is_file():
+            self.config = AutoConfig.from_json_file(str(expand_path(self.bert_config_file)))
+            self.encoder = AutoModel.from_config(config=self.bert_config)
+        else:
+            raise ConfigError("No pre-trained BERT model is given.")
 
 
 class CopyDefineNetwork(nn.Module):
@@ -184,24 +218,20 @@ class CopyDefineNetwork(nn.Module):
             pretrained_bert: str = None,
             bert_tokenizer_config_file: str = None,
             bert_config_file: str = None,
-            device: str = "gpu"
+            device: str = "gpu",
+            devices: List[int] = None  
     ):
         super().__init__()
-        self.device = torch.device("cuda" if torch.cuda.is_available() and device == "gpu" else "cpu")
+        self.devices = devices
+        if self.devices is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() and device == "gpu" else "cpu")
+        else:
+            self.device = torch.device(f"cuda:{self.devices[0]}")
         self.pretrained_bert = pretrained_bert
         self.encoder_save_path = encoder_save_path
         self.emb_save_path = emb_save_path
         self.bert_config_file = bert_config_file
         self.encoder, self.config, self.bert_config = None, None, None
-        self.load()
-        if Path(bert_tokenizer_config_file).is_file():
-            vocab_file = str(expand_path(bert_tokenizer_config_file))
-            self.tokenizer = BertTokenizer(vocab_file=vocab_file)
-        else:
-            tokenizer = BertTokenizer.from_pretrained(pretrained_bert)
-        self.encoder.resize_token_embeddings(len(tokenizer) + 5)
-        
-        self.classifier = nn.Linear(768, 2)
         self.zero_vec = torch.Tensor(768)
         self.source_embeddings = nn.Embedding(862, 384)
         self.target_embeddings = nn.Embedding(862, 384)
@@ -209,6 +239,12 @@ class CopyDefineNetwork(nn.Module):
         self.bilinear_topic = nn.Linear(768 * 8, 2)
         self.bilinear_token = nn.Linear(768 * 8, 2)
         self.bilinear_sent = nn.Linear(768 * 8, 5)
+        self.encoder = TextEncoder(pretrained_bert=self.pretrained_bert,
+                                   bert_tokenizer_config_file=bert_tokenizer_config_file,
+                                   bert_config_file=bert_config_file, device=self.device)
+        if self.devices is not None:
+            print("----------------- multi gpu, in load")
+            self.encoder = torch.nn.DataParallel(self.encoder, device_ids=self.devices)
 
     def forward(
             self,
@@ -227,18 +263,15 @@ class CopyDefineNetwork(nn.Module):
     ) -> Union[Tuple[Any, Tensor], Tuple[Tensor]]:
 
         bs = text_attention_mask.shape[0]
-        
         source_ids = torch.LongTensor(source_ids).to(self.device)
         target_ids = torch.LongTensor(target_ids).to(self.device)
         source_embs = self.source_embeddings(source_ids)
         target_embs = self.target_embeddings(target_ids)
         domain_embs = torch.cat((source_embs, target_embs), 1)
         domain_embs = torch.unsqueeze(domain_embs, 1).to(self.device)
-        
         bert_output = self.encoder(input_ids=text_input_ids,
                                    attention_mask=text_attention_mask,
                                    token_type_ids=text_token_type_ids)
-        
         hidden_states = bert_output.last_hidden_state
         
         entities_sent_batch = []
@@ -273,7 +306,6 @@ class CopyDefineNetwork(nn.Module):
         
         # _______________________________________________________________________________
         
-        print("topic_inds", topic_inds)
         topics_batch = []
         for i in range(bs):
             topics_list = []
@@ -284,7 +316,6 @@ class CopyDefineNetwork(nn.Module):
         
         topic_att_mask_batch = []
         max_topic_len = max([len(elem) for elem in topics_batch])
-        print("max_topic_len", max_topic_len, "topics_batch", topics_batch)
         
         if max_topic_len > 0:
             for i in range(bs):
@@ -344,14 +375,14 @@ class CopyDefineNetwork(nn.Module):
         cls_logits = F.softmax(cls_logits, 1)
         
         topic_logits = []
-        if topics_batch and topics_batch[0]:
+        if (isinstance(topics_batch, list) and topics_batch and topics_batch[0]) or isinstance(topics_batch, torch.Tensor):
             topic_hidden = topics_batch.view(bs, -1, 96, 8)
             bl_topic = (domain_embs1.unsqueeze(4) * topic_hidden.unsqueeze(3)).view(bs, -1, 768 * 8)
             topic_logits = self.bilinear_topic(bl_topic)
             topic_logits = F.softmax(topic_logits, 2)
         
         token_logits = []
-        if tokens_batch and tokens_batch[0]:
+        if (isinstance(tokens_batch, list) and tokens_batch and tokens_batch[0]) or isinstance(tokens_batch, torch.Tensor):
             token_hidden = tokens_batch.view(bs, -1, 96, 8)
             bl_token = (domain_embs1.unsqueeze(4) * token_hidden.unsqueeze(3)).view(bs, -1, 768 * 8)
             token_logits = self.bilinear_token(bl_token)
@@ -417,7 +448,15 @@ class CopyDefineNetwork(nn.Module):
         print("--------------------saving")
         encoder_weights_path = expand_path(self.encoder_save_path).with_suffix(f".pth.tar")
         log.info(f"Saving encoder to {encoder_weights_path}.")
-        torch.save({"model_state_dict": self.encoder.state_dict()}, encoder_weights_path)
+        if self.devices is not None:
+            encoder_state_dict = self.encoder.module.encoder.state_dict()
+        else:
+            encoder_state_dict = self.encoder.encoder.state_dict()
+        torch.save({"encoder_state_dict": encoder_state_dict,
+                    "cls_state_dict": self.bilinear_cls.state_dict(),
+                    "topic_state_dict": self.bilinear_topic.state_dict(),
+                    "token_state_dict": self.bilinear_token.state_dict(),
+                    "sent_state_dict": self.bilinear_sent.state_dict()}, encoder_weights_path)
         emb_weights_path = str(expand_path(self.emb_save_path))
         indices = [i for i in range(862)]
         indices = torch.LongTensor(indices).to(self.device)
@@ -429,17 +468,48 @@ class CopyDefineNetwork(nn.Module):
             pickle.dump(source_vectors, out)
         with open(f"{emb_weights_path}/target_domain_vectors.pickle", 'wb') as out:
             pickle.dump(target_vectors, out)
-        
+    
     def load(self) -> None:
-        if self.pretrained_bert:
-            log.info(f"From pretrained {self.pretrained_bert}.")
-            self.config = AutoConfig.from_pretrained(
-                self.pretrained_bert, output_hidden_states=True
-            )
-            self.encoder = BertModel.from_pretrained(self.pretrained_bert, config=self.config)
-
-        elif self.bert_config_file and Path(self.bert_config_file).is_file():
-            self.config = AutoConfig.from_json_file(str(expand_path(self.bert_config_file)))
-            self.encoder = BertModel.from_config(config=self.bert_config)
-        else:
-            raise ConfigError("No pre-trained BERT model is given.")
+        encoder_weights_path = expand_path(self.encoder_save_path).with_suffix(f".pth.tar")
+        if Path(encoder_weights_path).exists():
+            log.info(f"--------------- Loading encoder to {encoder_weights_path}.")
+            checkpoint = torch.load(encoder_weights_path, map_location=self.device)
+            if self.devices is None:
+                self.encoder.encoder.load_state_dict(checkpoint["encoder_state_dict"])
+            else:
+                self.encoder.module.encoder.load_state_dict(checkpoint["encoder_state_dict"])
+            self.bilinear_cls.load_state_dict(checkpoint["cls_state_dict"])
+            self.bilinear_topic.load_state_dict(checkpoint["topic_state_dict"])
+            self.bilinear_token.load_state_dict(checkpoint["token_state_dict"])
+            self.bilinear_sent.load_state_dict(checkpoint["sent_state_dict"])
+            
+        self.encoder.to(self.device)
+        self.bilinear_cls.to(self.device)
+        self.bilinear_topic.to(self.device)
+        self.bilinear_token.to(self.device)
+        self.bilinear_sent.to(self.device)
+        
+        emb_weights_path = str(expand_path(self.emb_save_path))
+        init_emb_weights_path = f"{emb_weights_path}/init_domain_vectors.pickle"
+        source_emb_weights_path = f"{emb_weights_path}/source_domain_vectors.pickle"
+        target_emb_weights_path = f"{emb_weights_path}/target_domain_vectors.pickle"
+        if Path(source_emb_weights_path).exists() and Path(target_emb_weights_path).exists():
+            log.info("loaded trained embeddings")
+            with open(source_emb_weights_path, 'rb') as fl:
+                source_emb_weights = pickle.load(fl)
+            source_emb_weights = torch.FloatTensor(source_emb_weights)
+            self.source_embeddings = nn.Embedding.from_pretrained(source_emb_weights)
+            with open(target_emb_weights_path, 'rb') as fl:
+                target_emb_weights = pickle.load(fl)
+            target_emb_weights = torch.FloatTensor(target_emb_weights)
+            self.target_embeddings = nn.Embedding.from_pretrained(target_emb_weights)
+        elif Path(init_emb_weights_path).exists():
+            log.info("loaded init domain embeddings")
+            with open(init_emb_weights_path, 'rb') as fl:
+                init_emb_weights = pickle.load(fl)
+            init_emb_weights = torch.FloatTensor(init_emb_weights)
+            self.source_embeddings = nn.Embedding.from_pretrained(init_emb_weights)
+            self.target_embeddings = nn.Embedding.from_pretrained(init_emb_weights)
+        
+        self.source_embeddings.to(self.device)
+        self.target_embeddings.to(self.device)
