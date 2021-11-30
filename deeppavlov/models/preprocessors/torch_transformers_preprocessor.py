@@ -1287,6 +1287,7 @@ class CopyDefineIndInferPostprocessor(Component):
                     topic_token_dict_batch, token_dict_batch, sent_pred_batch, entities_ind_sent_batch):
             topics = []
             nouns = []
+            sent_list = []
             if copy_pred == 1:
                 probs_dict = {}
                 for ind in topic_pred_list:
@@ -1305,7 +1306,6 @@ class CopyDefineIndInferPostprocessor(Component):
                         if token_ind in ind_list and self.morph.parse(token)[0].tag.POS == "NOUN":
                             nouns.append(token)
                             break
-                sent_list = [] 
                 for token_ind, token_sent in zip(entities_ind_sent, sent_pred):
                     for token, ind_list in token_dict.items():
                         if token_ind in ind_list and token in nouns:
