@@ -147,6 +147,48 @@ class MultiSquadIterator(DataLearningIterator):
         return tuple(zip(*data_examples))
 
 
+@register('tweetqa_iterator')
+class TweetQAIterator(DataLearningIterator):
+    """TweetQAIterator allows to iterate over examples in SQuAD-like datasets.
+    TweetQAIterator is used to train :class:`~deeppavlov.models.squad.squad.SquadModel`.
+
+    It extracts ``context``, ``question``, ``answer_text`` and ``answer_start`` position from dataset.
+    Example from a dataset is a tuple of ``(context, question)`` and ``(answer_text, answer_start)``
+
+    Attributes:
+        train: train examples
+        valid: validation examples
+        test: test examples
+
+    """
+    
+    def preprocess(self, data: Dict[str, Any], *args, **kwargs) -> \
+            List[Tuple[Tuple[str, str], Tuple[List[str], List[int]]]]:
+        """Extracts context, question, answer, answer_start from TweetQA data
+        Args:
+            data: data in squad format
+        Returns:
+            list of (context, question), (answer_text, answer_start)
+            answer text and answer_start are lists
+        """
+
+        cqas = []
+        if data:
+            for item in data:
+                context = item['Tweet'].lower()
+                q = item['Question'].lower()
+                if 'Answer' in item:                    
+                    for ans_text in item['Answer']:
+                        ans_text = ans_text.lower()
+                        if ans_text in context:
+                            ans_start = context.find(ans_text)
+                            cqas.append(((context, q), ([ans_text], [ans_start])))
+                            break
+                else:
+                    cqas.append(((context, q), ([''], [-1])))
+        return cqas
+    
+    
 @register('multi_squad_retr_iterator')
 class MultiSquadRetrIterator(DataLearningIterator):
     """Dataset iterator for multiparagraph-SQuAD dataset.
