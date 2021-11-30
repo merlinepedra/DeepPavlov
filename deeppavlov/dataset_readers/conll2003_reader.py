@@ -44,6 +44,8 @@ class Conll2003DatasetReader(DatasetReader):
                 url = 'http://files.deeppavlov.ai/deeppavlov_data/dailydialog.tar.gz'
             elif dataset_name == 'collection3':
                 url = 'http://files.deeppavlov.ai/deeppavlov_data/collection3_anh.tar.gz'
+            elif dataset_name == 'wnut16':
+                url = 'http://files.deeppavlov.ai/datasets/wnut16.zip'
             else:
                 raise RuntimeError('train.txt not found in "{}"'.format(data_path))
             data_path.mkdir(exist_ok=True, parents=True)
