@@ -6,7 +6,7 @@
   },
   "dataset_iterator": {
     "class_name": "copy_domain_iterator",
-    "batch_size": 18
+    "batch_size": 32
   },
   "chainer": {
     "in": ["source_id", "target_id", "text", "entities", "nouns", "topics", "entities_sent"],
@@ -34,7 +34,7 @@
         "pretrained_bert": "{TRANSFORMER}",
         "learning_rate_drop_patience": 30,
         "learning_rate_drop_div": 1.5,
-        "devices": [0, 1, 2]
+        "devices": [0, 1, 2, 3]
       },
       {
         "class_name": "copy_define_postprocessor",
@@ -46,7 +46,7 @@
   },
   "train": {
     "epochs": 50,
-    "batch_size": 18,
+    "batch_size": 32,
     "train_metrics": ["domain_acc", "topic_acc", "token_acc"],
     "metrics": ["domain_acc", "topic_acc", "token_acc"],
     "validation_patience": 100,
@@ -71,8 +71,8 @@
         "subdir": "{DOWNLOADS_PATH}/domains"
       },
       {
-        "url": "http://files.deeppavlov.ai/deeppavlov_data/domain_graph/copy_define_ind.tar.gz",
-        "subdir": "{MODELS_PATH}/copy_define"
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/domain_graph/copy_define_ind_new.tar.gz",
+        "subdir": "{MODELS_PATH}/copy_define_ind"
       }
     ]
   }
