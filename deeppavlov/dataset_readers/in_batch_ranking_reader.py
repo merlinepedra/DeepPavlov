@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
+import json
 import pickle
 
 from deeppavlov.core.common.registry import register
@@ -23,9 +25,15 @@ class InBatchRankingReader(DatasetReader):
     """Class to read training datasets in OntoNotes format"""
 
     def read(self, data_path: str, train_size: int = None, valid_size: int = None):
-        with open(data_path, 'rb') as f:
-            dataset = pickle.load(f)
+        if str(data_path).endswith(".pickle"):
+            with open(data_path, 'rb') as fl:
+                dataset = pickle.load(fl)
+        elif str(data_path).endswith(".json"):
+            with open(data_path, 'r') as fl:
+                dataset = json.load(fl) 
         
+        if "valid" not in dataset and "test" in dataset:
+            dataset["valid"] = copy.deepcopy(dataset["test"])
         if train_size is not None:
             dataset["train"] = dataset["train"][:train_size]
         if valid_size is not None:
