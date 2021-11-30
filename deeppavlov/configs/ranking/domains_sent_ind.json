@@ -6,7 +6,7 @@
   },
   "dataset_iterator": {
     "class_name": "copy_domain_iterator",
-    "batch_size": 32
+    "batch_size": 6
   },
   "chainer": {
     "in": ["source_id", "target_id", "text", "entities", "nouns", "topics", "entities_sent"],
@@ -32,9 +32,9 @@
         "emb_save_path": "{MODEL_PATH}",
         "model_name": "copy_define_model",
         "pretrained_bert": "{TRANSFORMER}",
-        "learning_rate_drop_patience": 30,
+        "learning_rate_drop_patience": 5,
         "learning_rate_drop_div": 1.5,
-        "devices": [0, 1, 2, 3]
+        "num_embeddings": 862
       },
       {
         "class_name": "copy_define_postprocessor",
@@ -46,10 +46,10 @@
   },
   "train": {
     "epochs": 50,
-    "batch_size": 32,
+    "batch_size": 6,
     "train_metrics": ["domain_acc", "topic_acc", "token_acc"],
     "metrics": ["domain_acc", "topic_acc", "token_acc"],
-    "validation_patience": 100,
+    "validation_patience": 8,
     "val_every_n_batches": 50,
     "log_every_n_batches": 50,
     "evaluation_targets": ["valid", "train"],
@@ -59,7 +59,7 @@
   },
   "metadata": {
     "variables": {
-      "ROOT_PATH": "/archive/evseev/.deeppavlov",
+      "ROOT_PATH": "~/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
       "TRANSFORMER": "DeepPavlov/rubert-base-cased",

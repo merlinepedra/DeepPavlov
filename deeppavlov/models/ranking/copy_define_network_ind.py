@@ -44,6 +44,7 @@ class CopyDefineModelInd(TorchModel):
             hidden_keep_prob: Optional[float] = None,
             clip_norm: Optional[float] = None,
             threshold: Optional[float] = None,
+            num_embeddings: int = None,
             devices: List[int] = None,
             **kwargs
     ):
@@ -55,6 +56,7 @@ class CopyDefineModelInd(TorchModel):
         self.attention_probs_keep_prob = attention_probs_keep_prob
         self.hidden_keep_prob = hidden_keep_prob
         self.clip_norm = clip_norm
+        self.num_embeddings = num_embeddings
         self.devices = devices
         self.tokenizer = BertTokenizer.from_pretrained(pretrained_bert, do_lower_case=True)
         special_tokens_dict = {'additional_special_tokens': ['<text>', '<ner>', '</ner>', '<freq_topic>', '</freq_topic>']}
@@ -197,6 +199,7 @@ class CopyDefineModelInd(TorchModel):
             encoder_save_path=self.encoder_save_path,
             emb_save_path=self.emb_save_path,
             bert_tokenizer_config_file=self.pretrained_bert,
+            num_embeddings=self.num_embeddings,
             devices=self.devices
         )
         
@@ -258,9 +261,11 @@ class CopyDefineNetwork(nn.Module):
             bert_tokenizer_config_file: str = None,
             bert_config_file: str = None,
             device: str = "gpu",
+            num_embeddings: int = 862,
             devices: List[int] = None  
     ):
         super().__init__()
+        self.num_embeddings = num_embeddings
         self.devices = devices
         if self.devices is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() and device == "gpu" else "cpu")
@@ -272,8 +277,8 @@ class CopyDefineNetwork(nn.Module):
         self.bert_config_file = bert_config_file
         self.encoder, self.config, self.bert_config = None, None, None
         self.zero_vec = torch.Tensor(768)
-        self.source_embeddings = nn.Embedding(862, 384)
-        self.target_embeddings = nn.Embedding(862, 384)
+        self.source_embeddings = nn.Embedding(self.num_embeddings, 384)
+        self.target_embeddings = nn.Embedding(self.num_embeddings, 384)
         self.bilinear_cls = nn.Linear(768 * 8, 2)
         self.bilinear_topic = nn.Linear(768 * 8, 2)
         self.bilinear_token = nn.Linear(768 * 8, 2)
@@ -309,6 +314,7 @@ class CopyDefineNetwork(nn.Module):
             topic_labels = list(topic_labels)
         if token_labels is not None:
             token_labels = list(token_labels)
+        
         source_ids = torch.LongTensor(source_ids).to(self.device)
         target_ids = torch.LongTensor(target_ids).to(self.device)
         source_embs = self.source_embeddings(source_ids)
@@ -559,10 +565,20 @@ class CopyDefineNetwork(nn.Module):
             with open(source_emb_weights_path, 'rb') as fl:
                 source_emb_weights = pickle.load(fl)
             source_emb_weights = torch.FloatTensor(source_emb_weights)
+            if source_emb_weights.size()[0] < self.num_embeddings:
+                num_rand_emb = self.num_embeddings - source_emb_weigths.size()[0]
+                rand_embeddings = nn.Embedding(num_rand_emb, 384).weight
+                source_emb_weights = torch.cat((source_emb_weights, rand_embeddings), dim=0)
             self.source_embeddings = nn.Embedding.from_pretrained(source_emb_weights)
+            
             with open(target_emb_weights_path, 'rb') as fl:
                 target_emb_weights = pickle.load(fl)
             target_emb_weights = torch.FloatTensor(target_emb_weights)
+            if target_emb_weights.size()[0] < self.num_embeddings:
+                num_rand_emb = self.num_embeddings - target_emb_weigths.size()[0]
+                rand_embeddings = nn.Embedding(num_rand_emb, 384).weight
+                target_emb_weights = torch.cat((target_emb_weights, rand_embeddings), dim=0)
+            
             self.target_embeddings = nn.Embedding.from_pretrained(target_emb_weights)
         elif Path(init_emb_weights_path).exists():
             log.info("loaded init domain embeddings")

@@ -558,7 +558,7 @@ class AdoptingIndPreprocessor(Component):
                 sp_tok_ind = []
                 
                 topic_tok_cnt = 0
-                doc_wordpiece_tokens.append("<FREQ_TOPIC>")
+                doc_wordpiece_tokens.append("<freq_topic>")
                 sp_tok_ind.append(ind)
                 ind += 1
                 topic_tok_cnt += 1
@@ -588,7 +588,7 @@ class AdoptingIndPreprocessor(Component):
                         topic_token_dict[freq_topic].append(topic_tok_cnt)
                         topic_tok_cnt += 1
                     
-                doc_wordpiece_tokens.append("</FREQ_TOPIC>")
+                doc_wordpiece_tokens.append("</freq_topic>")
                 sp_tok_ind.append(ind)
                 ind += 1
                 topic_tok_cnt += 1
@@ -619,7 +619,7 @@ class AdoptingIndPreprocessor(Component):
             
             token_dict = {}
             entity_tok_cnt = 0
-            doc_wordpiece_tokens.append("<TEXT>")
+            doc_wordpiece_tokens.append("<text>")
             ind += 1
             entity_tok_cnt += 1
             
@@ -682,11 +682,11 @@ class AdoptingIndPreprocessor(Component):
             label_add_tokens = []
             for i in range(len(text_tokens)):
                 if i in entity_start_pos_list:
-                    doc_wordpiece_tokens.append("<NER>")
+                    doc_wordpiece_tokens.append("<ner>")
                     ind += 1
                     entity_tok_cnt += 1
                 elif i in entity_end_pos_list:
-                    doc_wordpiece_tokens.append("</NER>")
+                    doc_wordpiece_tokens.append("</ner>")
                     ind += 1
                     entity_tok_cnt += 1
                 if i in entity_sent_start_pos_list and len(doc_wordpiece_tokens) < 485:
@@ -723,7 +723,6 @@ class AdoptingIndPreprocessor(Component):
                     entity_tok_cnt += 1
               
             tm5 = time.time()
-            print(round(tm2 - tm1, 5), round(tm3 - tm2, 5), round(tm4 - tm3, 5), round(tm5 - tm4, 5))
             
             pos_token_ind = sorted(list(set(pos_token_ind)))
             neg_token_ind = sorted(list(set(neg_token_ind)))
@@ -733,7 +732,7 @@ class AdoptingIndPreprocessor(Component):
                 neg_token_ind = neg_token_ind[:len(pos_token_ind)]
                     
             label_add_tokens_batch.append(label_add_tokens)
-            doc_wordpiece_tokens.append("<TEXT>")
+            doc_wordpiece_tokens.append("<text>")
             
             wordpiece_tokens_batch.append(doc_wordpiece_tokens)
             token_dict_batch.append(token_dict)
@@ -772,7 +771,6 @@ class AdoptingIndPreprocessor(Component):
         text_features = {"input_ids": input_ids_batch,
                          "attention_mask": attention_mask_batch,
                          "token_type_ids": token_type_ids_batch}
-        print("preprocessing", time.time() - tm_st)
             
         return cls_labels, text_features, topic_ind_batch, topic_labels_batch, token_ind_batch, token_labels_batch, \
             topic_token_dict_batch, token_dict_batch, entity_sent_ind_batch
