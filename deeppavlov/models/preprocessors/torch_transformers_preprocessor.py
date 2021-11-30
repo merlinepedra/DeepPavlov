@@ -14,6 +14,7 @@
 
 import re
 import random
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 from logging import getLogger
@@ -514,7 +515,7 @@ class AdoptingIndPreprocessor(Component):
         self.return_tokens = return_tokens
         self.re_tokenizer = re.compile(r"[\w']+|[^\w ]")
         self.tokenizer = BertTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
-        special_tokens_dict = {'additional_special_tokens': ['<TEXT>', '<NER>', '</NER>', '<FREQ_TOPIC>', '</FREQ_TOPIC>']}
+        special_tokens_dict = {'additional_special_tokens': ['<text>', '<ner>', '</ner>', '<freq_topic>', '</freq_topic>']}
         num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
         self.morph = pymorphy2.MorphAnalyzer()
         self.number = 0
@@ -522,6 +523,7 @@ class AdoptingIndPreprocessor(Component):
     
     def __call__(self, text_batch, entities_batch, nouns_batch, nouns_inters_batch, topics_batch,
                        topics_inters_batch, classes_batch, entities_sent_batch = None):
+        tm_st = time.time()
         wordpiece_tokens_batch = []
         if topics_batch is None:
             topics_batch = [[] for _ in text_batch]
@@ -541,6 +543,7 @@ class AdoptingIndPreprocessor(Component):
         for text, entities, nouns, nouns_inters, entities_sent, topics, topics_inters, cls in \
                 zip(text_batch, entities_batch, nouns_batch, nouns_inters_batch, entities_sent_batch, topics_batch,
                     topics_inters_batch, classes_batch):
+            tm1 = time.time()
             cls_labels.append(cls)
             ind = 1
             entity_sent_ind_list = []
@@ -612,6 +615,8 @@ class AdoptingIndPreprocessor(Component):
                             neg_topic_ind.append(neg_ind)
                             break
             
+            tm2 = time.time()
+            
             token_dict = {}
             entity_tok_cnt = 0
             doc_wordpiece_tokens.append("<TEXT>")
@@ -652,6 +657,8 @@ class AdoptingIndPreprocessor(Component):
                     if matches == len(noun_tokens):
                         noun_inters_pos_list.append((i, i + len(noun_tokens)))
             
+            tm3 = time.time()
+            
             found_inters_tokens = []
             entity_inters_pos_list = []
             text_tokens = re.findall(self.re_tokenizer, text)
@@ -669,6 +676,8 @@ class AdoptingIndPreprocessor(Component):
                         entity_inters_pos_list.append((i, i + len(entity_tokens)))
                         found_inters_tokens.append(text_tokens[i:i+len(entity_tokens)])
             found_inters_tokens_batch.append(found_inters_tokens)
+            
+            tm4 = time.time()
             
             label_add_tokens = []
             for i in range(len(text_tokens)):
@@ -712,7 +721,10 @@ class AdoptingIndPreprocessor(Component):
                 for _ in word_tokens:
                     token_dict[text_tokens[i]].append(entity_tok_cnt)
                     entity_tok_cnt += 1
-                
+              
+            tm5 = time.time()
+            print(round(tm2 - tm1, 5), round(tm3 - tm2, 5), round(tm4 - tm3, 5), round(tm5 - tm4, 5))
+            
             pos_token_ind = sorted(list(set(pos_token_ind)))
             neg_token_ind = sorted(list(set(neg_token_ind)))
             if len(pos_token_ind) > len(neg_token_ind):
@@ -748,24 +760,6 @@ class AdoptingIndPreprocessor(Component):
         input_ids_batch = []
         attention_mask_batch = []
         token_type_ids_batch = []
-        
-        #out = open("log_wordpiece.txt", 'a')
-        #for wordpiece_tokens, token_inds, token_labels, token_ind_dict in \
-        #        zip(wordpiece_tokens_batch, token_ind_batch, token_labels_batch, token_dict_batch):
-        #    out.write(str(token_inds)+'\n')
-        #    out.write(str(token_labels)+'\n')
-        #    out.write(str(wordpiece_tokens[18:])+'\n')
-        #    found_tokens = []
-        #    for ind in token_inds:
-        #        found_tok = ""
-        #        for tok in token_ind_dict:
-        #            if ind - 19 in token_ind_dict[tok] and tok not in found_tokens:
-        #                found_tok = tok
-        #                break
-        #        found_tokens.append([found_tok, wordpiece_tokens[ind - 1]])
-        #    out.write(f"found_tokens {found_tokens}"+'\n')
-        #    out.write("_"*60+'\n\n')
-        #out.close()
             
         for wordpiece_tokens in wordpiece_tokens_batch:
             encoding = self.tokenizer.encode_plus(wordpiece_tokens, add_special_tokens = True,
@@ -778,6 +772,7 @@ class AdoptingIndPreprocessor(Component):
         text_features = {"input_ids": input_ids_batch,
                          "attention_mask": attention_mask_batch,
                          "token_type_ids": token_type_ids_batch}
+        print("preprocessing", time.time() - tm_st)
             
         return cls_labels, text_features, topic_ind_batch, topic_labels_batch, token_ind_batch, token_labels_batch, \
             topic_token_dict_batch, token_dict_batch, entity_sent_ind_batch
@@ -900,9 +895,9 @@ class AdoptingIndInferPreprocessor(Component):
                             matches += 1
                     if matches == len(entity_tokens):
                         entity_start_pos_list.append(i)
-                        if entity in entities_sent and entity not in used_entities:
+                        if entity in entities_sent and i not in used_entities:
                             entity_sent_start_pos_list.append(i)
-                            used_entities.add(entity)
+                            used_entities.add(i)
                         entity_end_pos_list.append(i + len(entity_tokens))
             
             text_tokens = re.findall(self.re_tokenizer, text)
@@ -1284,12 +1279,12 @@ class CopyDefineIndInferPostprocessor(Component):
         self.morph = pymorphy2.MorphAnalyzer()
     
     def __call__(self, copy_pred_batch, copy_conf_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch,
-                       topic_token_dict_batch, token_dict_batch, sent_pred_batch):
+                       topic_token_dict_batch, token_dict_batch, sent_pred_batch, entities_ind_sent_batch):
         model_output_batch = []
         for copy_pred, copy_conf, topic_pred_list, topics_with_probs, token_ind_list, topic_token_dict, token_dict, \
-                sent_pred in \
+                sent_pred, entities_ind_sent in \
                 zip(copy_pred_batch, copy_conf_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch,
-                    topic_token_dict_batch, token_dict_batch, sent_pred_batch):
+                    topic_token_dict_batch, token_dict_batch, sent_pred_batch, entities_ind_sent_batch):
             topics = []
             nouns = []
             if copy_pred == 1:
@@ -1310,9 +1305,15 @@ class CopyDefineIndInferPostprocessor(Component):
                         if token_ind in ind_list and self.morph.parse(token)[0].tag.POS == "NOUN":
                             nouns.append(token)
                             break
+                sent_list = [] 
+                for token_ind, token_sent in zip(entities_ind_sent, sent_pred):
+                    for token, ind_list in token_dict.items():
+                        if token_ind in ind_list and token in nouns:
+                            if (sent_list and token != sent_list[-1][0]) or not sent_list:
+                                sent_list.append((token, token_sent))
             else:
                 copy_conf = 1.0 - copy_conf
-            model_output = (copy_pred, copy_conf, topics, nouns, sent_pred)
+            model_output = (copy_pred, copy_conf, topics, nouns, sent_list)
             model_output_batch.append(model_output)
         return model_output_batch
 

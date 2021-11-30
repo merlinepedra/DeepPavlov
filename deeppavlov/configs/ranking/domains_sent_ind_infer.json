@@ -33,7 +33,7 @@
       {
         "class_name": "copy_define_ind_infer_postprocessor",
         "in": ["copy_or_not", "copy_or_not_conf", "topic_pred", "topics_with_probs", "token_pred",
-               "topic_token_dict", "token_dict", "sent_pred"],
+               "topic_token_dict", "token_dict", "sent_pred", "entities_ind_sent"],
         "out": ["model_output"]
       }
     ],
