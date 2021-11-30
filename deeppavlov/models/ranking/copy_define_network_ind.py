@@ -1,5 +1,6 @@
 import itertools
 import pickle
+import time
 from pathlib import Path
 from logging import getLogger
 from typing import List, Optional, Dict, Tuple, Union, Any
@@ -55,6 +56,9 @@ class CopyDefineModelInd(TorchModel):
         self.hidden_keep_prob = hidden_keep_prob
         self.clip_norm = clip_norm
         self.devices = devices
+        self.tokenizer = BertTokenizer.from_pretrained(pretrained_bert, do_lower_case=True)
+        special_tokens_dict = {'additional_special_tokens': ['<text>', '<ner>', '</ner>', '<freq_topic>', '</freq_topic>']}
+        num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
 
         super().__init__(
             model_name=model_name,
@@ -79,8 +83,25 @@ class CopyDefineModelInd(TorchModel):
         _input = {'source_ids': source_ids, 'target_ids': target_ids, 'entities_ind_sent': entities_ind_sent,
                   'topic_inds': topic_inds, 'token_inds': token_inds, 'cls_labels': cls_labels,
                   'topic_labels': topic_labels, 'token_labels': token_labels, 'sentiment': sentiment}
-        for elem in ['input_ids', 'attention_mask', 'token_type_ids']:
-            _input[f"text_{elem}"] = torch.LongTensor(text_features[elem]).to(self.device)
+        
+        if isinstance(text_features, list) or isinstance(text_features, tuple):
+            max_len = max([len(elem) for elem in text_features]) + 2
+            input_ids_batch = []
+            attention_mask_batch = []
+            token_type_ids_batch = []
+            for wordpiece_tokens in text_features:
+                encoding = self.tokenizer.encode_plus(wordpiece_tokens, add_special_tokens = True,
+                                                  truncation = True, max_length=max_len,
+                                                  pad_to_max_length=True, return_attention_mask = True)
+                input_ids_batch.append(encoding["input_ids"][:490])
+                attention_mask_batch.append(encoding["attention_mask"][:490])
+                token_type_ids_batch.append(encoding["token_type_ids"][:490])
+            _input["text_input_ids"] = torch.LongTensor(input_ids_batch).to(self.device)
+            _input["text_attention_mask"] = torch.LongTensor(attention_mask_batch).to(self.device)
+            _input["text_token_type_ids"] = torch.LongTensor(token_type_ids_batch).to(self.device)
+        else:
+            for elem in ['input_ids', 'attention_mask', 'token_type_ids']:
+                _input[f"text_{elem}"] = torch.LongTensor(text_features[elem]).to(self.device)
         
         self.model.train()
         self.model.zero_grad()
@@ -111,10 +132,28 @@ class CopyDefineModelInd(TorchModel):
         _input = {'source_ids': source_ids, 'target_ids': target_ids, 'entities_ind_sent': entities_ind_sent,
                   'topic_inds': topic_inds, 'token_inds': token_inds}
         
-        for elem in ['input_ids', 'attention_mask', 'token_type_ids']:
-            _input[f"text_{elem}"] = torch.LongTensor(text_features[elem]).to(self.device)
+        if isinstance(text_features, list) or isinstance(text_features, tuple):
+            max_len = max([len(elem) for elem in text_features]) + 2
+            input_ids_batch = []
+            attention_mask_batch = []
+            token_type_ids_batch = []
+            for wordpiece_tokens in text_features:
+                encoding = self.tokenizer.encode_plus(wordpiece_tokens, add_special_tokens = True,
+                                                  truncation = True, max_length=max_len,
+                                                  pad_to_max_length=True, return_attention_mask = True)
+                input_ids_batch.append(encoding["input_ids"][:490])
+                attention_mask_batch.append(encoding["attention_mask"][:490])
+                token_type_ids_batch.append(encoding["token_type_ids"][:490])
+            _input["text_input_ids"] = torch.LongTensor(input_ids_batch).to(self.device)
+            _input["text_attention_mask"] = torch.LongTensor(attention_mask_batch).to(self.device)
+            _input["text_token_type_ids"] = torch.LongTensor(token_type_ids_batch).to(self.device)
+        else:
+            for elem in ['input_ids', 'attention_mask', 'token_type_ids']:
+                _input[f"text_{elem}"] = torch.LongTensor(text_features[elem]).to(self.device)
         copy_topic_inds = []
         copy_token_inds = []
+        
+        tm_st = time.time()
         with torch.no_grad():
             cls_softmax_scores, topic_softmax_scores, token_softmax_scores, sent_softmax_scores = self.model(**_input)
             copy_or_not = torch.argmax(cls_softmax_scores, dim=1)
@@ -245,6 +284,8 @@ class CopyDefineNetwork(nn.Module):
         if self.devices is not None:
             print("----------------- multi gpu, in load")
             self.encoder = torch.nn.DataParallel(self.encoder, device_ids=self.devices)
+        self.tm_enc = 0.0
+        self.tm_bilinear = 0.0
 
     def forward(
             self,
@@ -263,17 +304,27 @@ class CopyDefineNetwork(nn.Module):
     ) -> Union[Tuple[Any, Tensor], Tuple[Tensor]]:
 
         bs = text_attention_mask.shape[0]
+        
+        if topic_labels is not None:
+            topic_labels = list(topic_labels)
+        if token_labels is not None:
+            token_labels = list(token_labels)
         source_ids = torch.LongTensor(source_ids).to(self.device)
         target_ids = torch.LongTensor(target_ids).to(self.device)
         source_embs = self.source_embeddings(source_ids)
         target_embs = self.target_embeddings(target_ids)
         domain_embs = torch.cat((source_embs, target_embs), 1)
         domain_embs = torch.unsqueeze(domain_embs, 1).to(self.device)
+        self.tm_enc = 0.0
+        self.tm_bilinear = 0.0
+        tm1 = time.time()
         bert_output = self.encoder(input_ids=text_input_ids,
                                    attention_mask=text_attention_mask,
                                    token_type_ids=text_token_type_ids)
         hidden_states = bert_output.last_hidden_state
+        self.tm_enc = time.time() - tm1
         
+        tm1 = time.time()
         entities_sent_batch = []
         for i in range(bs):
             entities_sent_list = []
@@ -324,8 +375,12 @@ class CopyDefineNetwork(nn.Module):
                     topic_att_mask[j] = 1
                 for j in range(max_topic_len - len(topics_batch[i])):
                     topics_batch[i].append(self.zero_vec.to(self.device))
-                    if topic_labels is not None:
-                        topic_labels[i].append(0)
+                if topic_labels is not None:
+                    if max_topic_len > len(topic_labels[i]):
+                        for j in range(max_topic_len - len(topic_labels[i])):
+                            topic_labels[i].append(0)
+                    elif max_topic_len < len(topic_labels[i]):
+                        topic_labels[i] = topic_labels[i][:max_topic_len]
                 
                 topics_batch[i] = torch.stack(topics_batch[i], dim=0)
                 topic_att_mask_batch.append(topic_att_mask)
@@ -352,8 +407,12 @@ class CopyDefineNetwork(nn.Module):
                     token_att_mask[j] = 1
                 for j in range(max_token_len - len(tokens_batch[i])):
                     tokens_batch[i].append(self.zero_vec.to(self.device))
-                    if token_labels is not None:
-                        token_labels[i].append(0)
+                if token_labels is not None:
+                    if max_token_len > len(token_labels[i]):
+                        for j in range(max_token_len - len(token_labels[i])):
+                            token_labels[i].append(0)
+                    elif max_token_len < len(token_labels[i]):
+                        token_labels[i] = token_labels[i][:max_token_len]
                 
                 tokens_batch[i] = torch.stack(tokens_batch[i], dim=0)
                 token_att_mask_batch.append(token_att_mask)
@@ -399,12 +458,14 @@ class CopyDefineNetwork(nn.Module):
         sent_att_mask_batch = torch.LongTensor(sent_att_mask_batch).to(self.device)
         
         ce_loss_fct = nn.CrossEntropyLoss()
+        self.tm_bilinear = time.time() - tm1
         
         total_loss = None
         if sentiment is not None:
-            sentiment = torch.LongTensor(sentiment).to(self.device)
+            sentiment = torch.LongTensor(sentiment).to(self.device) 
             topic_labels = torch.LongTensor(topic_labels).to(self.device)
             token_labels = torch.LongTensor(token_labels).to(self.device)
+            
             cls_labels = torch.LongTensor(cls_labels).to(self.device)
             cls_loss = ce_loss_fct(cls_logits, cls_labels)
             

@@ -57,7 +57,7 @@
         "subdir": "{DOWNLOADS_PATH}/domains"
       },
       {
-        "url": "http://files.deeppavlov.ai/deeppavlov_data/domain_graph/copy_define_ind.tar.gz",
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/domain_graph/copy_define_ind_new.tar.gz",
         "subdir": "{MODELS_PATH}/copy_define_sent"
       }
     ]

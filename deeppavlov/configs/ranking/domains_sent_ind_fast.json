@@ -1,0 +1,71 @@
+{
+  "dataset_reader": {
+    "class_name": "in_batch_ranking_reader",
+    "valid_size": 400,
+    "data_path": "{DOWNLOADS_PATH}/domains/domain_dataset_sent_prepr.pickle"
+  },
+  "dataset_iterator": {
+    "class_name": "copy_domain_iterator",
+    "batch_size": 32
+  },
+  "chainer": {
+    "in": ["source_id", "target_id", "text", "entities", "nouns", "topics", "entities_sent",
+           "text_features", "topic_ind", "token_ind", "topic_token_dict", "token_dict", "entities_ind_sent"],
+    "in_y": ["copy_or_not_labels", "entities_inters", "topics_inters", "sentiment", "topic_labels", "token_labels"],
+    "pipe": [
+      {
+        "class_name": "copy_define_model_ind",
+        "in": ["source_id", "target_id", "text_features", "entities_ind_sent", "topic_ind", "token_ind"],
+        "in_y": ["copy_or_not_labels", "topic_labels", "token_labels", "sentiment"],
+        "out": ["copy_or_not", "copy_or_not_conf", "topic_pred", "token_pred", "sent_pred"],
+        "save_path": "{MODEL_PATH}/model",
+        "load_path": "{MODEL_PATH}/model",
+        "encoder_save_path": "{MODEL_PATH}/encoder",
+        "emb_save_path": "{MODEL_PATH}",
+        "model_name": "copy_define_model",
+        "pretrained_bert": "{TRANSFORMER}",
+        "learning_rate_drop_patience": 30,
+        "learning_rate_drop_div": 1.5,
+        "devices": [0, 1, 2, 3]
+      },
+      {
+        "class_name": "copy_define_postprocessor",
+        "in": ["copy_or_not", "topic_pred", "token_pred", "topic_token_dict", "token_dict", "sent_pred"],
+        "out": ["model_output"]
+      }
+    ],
+    "out": ["model_output"]
+  },
+  "train": {
+    "epochs": 50,
+    "batch_size": 32,
+    "train_metrics": ["domain_acc2", "topic_acc2", "token_acc2"],
+    "metrics": ["domain_acc2", "topic_acc2", "token_acc2"],
+    "validation_patience": 100,
+    "val_every_n_batches": 50,
+    "log_every_n_batches": 50,
+    "evaluation_targets": ["valid", "train"],
+    "show_examples": false,
+    "ranking_prepr": true,
+    "class_name": "torch_trainer"
+  },
+  "metadata": {
+    "variables": {
+      "ROOT_PATH": "/archive/evseev/.deeppavlov",
+      "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
+      "MODELS_PATH": "{ROOT_PATH}/models",
+      "TRANSFORMER": "DeepPavlov/rubert-base-cased",
+      "MODEL_PATH": "{MODELS_PATH}/copy_define_ind"
+      },
+    "download": [
+      {
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/domain_graph/domain_dataset.pickle",
+        "subdir": "{DOWNLOADS_PATH}/domains"
+      },
+      {
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/domain_graph/copy_define_ind_new.tar.gz",
+        "subdir": "{MODELS_PATH}/copy_define"
+      }
+    ]
+  }
+}
