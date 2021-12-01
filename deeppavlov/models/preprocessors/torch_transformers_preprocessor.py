@@ -788,8 +788,9 @@ class AdoptingIndInferPreprocessor(Component):
         self.max_seq_length = max_seq_length
         self.return_tokens = return_tokens
         self.re_tokenizer = re.compile(r"[\w']+|[^\w ]")
+        self.do_lower_case = do_lower_case
         self.tokenizer = BertTokenizer.from_pretrained(vocab_file, do_lower_case=do_lower_case)
-        special_tokens_dict = {'additional_special_tokens': ['<TEXT>', '<NER>', '</NER>', '<FREQ_TOPIC>', '</FREQ_TOPIC>']}
+        special_tokens_dict = {'additional_special_tokens': ['<text>', '<ner>', '</ner>', '<freq_topic>', '</freq_topic>']}
         num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
         self.morph = pymorphy2.MorphAnalyzer()
         self.number = 0
@@ -813,6 +814,14 @@ class AdoptingIndInferPreprocessor(Component):
         
         for text, entities, nouns, nouns_inters, entities_sent, topics in \
                 zip(text_batch, entities_batch, nouns_batch, nouns_inters_batch, entities_sent_batch, topics_batch):
+            if self.do_lower_case:
+                text = text.lower()
+                entities = [entity.lower() for entity in entities]
+                nouns = [noun.lower() for noun in nouns]
+                nouns_inters = [noun.lower() for noun in nouns_inters]
+                entities_sent = [entity.lower() for entity in entities_sent]
+            nouns = [noun for noun in nouns if not any([set(noun.split()).intersection(entity.split()) for entity in entities])]
+            nouns_inters =  entities + [noun for noun in nouns_inters if noun in nouns]
             ind = 1
             entity_sent_ind_list = []
             used_entities = set()
@@ -827,7 +836,7 @@ class AdoptingIndInferPreprocessor(Component):
                 sp_tok_ind = []
                 
                 topic_tok_cnt = 0
-                doc_wordpiece_tokens.append("<FREQ_TOPIC>")
+                doc_wordpiece_tokens.append("<freq_topic>")
                 sp_tok_ind.append(ind)
                 ind += 1
                 topic_tok_cnt += 1
@@ -852,7 +861,7 @@ class AdoptingIndInferPreprocessor(Component):
                         topic_token_dict[freq_topic].append(topic_tok_cnt)
                         topic_tok_cnt += 1
                     
-                doc_wordpiece_tokens.append("</FREQ_TOPIC>")
+                doc_wordpiece_tokens.append("</freq_topic>")
                 sp_tok_ind.append(ind)
                 ind += 1
                 topic_tok_cnt += 1
@@ -871,7 +880,7 @@ class AdoptingIndInferPreprocessor(Component):
             
             token_dict = {}
             entity_tok_cnt = 0
-            doc_wordpiece_tokens.append("<TEXT>")
+            doc_wordpiece_tokens.append("<text>")
             ind += 1
             entity_tok_cnt += 1
             
@@ -930,16 +939,17 @@ class AdoptingIndInferPreprocessor(Component):
             label_add_tokens = []
             for i in range(len(text_tokens)):
                 if i in entity_start_pos_list:
-                    doc_wordpiece_tokens.append("<NER>")
+                    doc_wordpiece_tokens.append("<ner>")
                     ind += 1
                     entity_tok_cnt += 1
                 elif i in entity_end_pos_list:
-                    doc_wordpiece_tokens.append("</NER>")
+                    doc_wordpiece_tokens.append("</ner>")
                     ind += 1
                     entity_tok_cnt += 1
-                if i in entity_sent_start_pos_list and len(doc_wordpiece_tokens) < 485:
-                    entity_sent_ind_list.append(len(doc_wordpiece_tokens))
                 word_tokens = self.tokenizer.tokenize(text_tokens[i])
+                if i in entity_sent_start_pos_list and len(doc_wordpiece_tokens) < 485:
+                    for _ in word_tokens:
+                        entity_sent_ind_list.append(ind)
                 found_entity_inters = False
                 for entity_inters_pos in entity_inters_pos_list:
                     if i >= entity_inters_pos[0] and i < entity_inters_pos[1]:
@@ -978,7 +988,7 @@ class AdoptingIndInferPreprocessor(Component):
                 neg_token_ind = neg_token_ind[:len(pos_token_ind)]
                     
             label_add_tokens_batch.append(label_add_tokens)
-            doc_wordpiece_tokens.append("<TEXT>")
+            doc_wordpiece_tokens.append("<text>")
             
             wordpiece_tokens_batch.append(doc_wordpiece_tokens)
             token_dict_batch.append(token_dict)
@@ -1306,9 +1316,9 @@ class CopyDefineIndInferPostprocessor(Component):
                             break
                 for token_ind, token_sent in zip(entities_ind_sent, sent_pred):
                     for token, ind_list in token_dict.items():
-                        if token_ind in ind_list and token in nouns:
-                            if (sent_list and token != sent_list[-1][0]) or not sent_list:
-                                sent_list.append((token, token_sent))
+                        if token_ind - 19 in ind_list:
+                            sent_list.append((token, token_sent))
+                sent_list = [(token, token_sent) for token, token_sent in sent_list if token in nouns]
             else:
                 copy_conf = 1.0 - copy_conf
             model_output = (copy_pred, copy_conf, topics, nouns, sent_list)

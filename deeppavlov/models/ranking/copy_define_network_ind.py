@@ -44,7 +44,7 @@ class CopyDefineModelInd(TorchModel):
             hidden_keep_prob: Optional[float] = None,
             clip_norm: Optional[float] = None,
             threshold: Optional[float] = None,
-            num_embeddings: int = None,
+            num_embeddings: int = 862,
             devices: List[int] = None,
             **kwargs
     ):
