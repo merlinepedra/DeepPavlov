@@ -25,6 +25,7 @@ def evaluate(ner_config, after_training):
 
     metrics = dict(res["test"])
     cur_f1 = metrics["ner_f1"]
+    replace_model = False
 
     if Path(metrics_filename).exists():
         df = pd.read_csv(metrics_filename)
@@ -34,19 +35,23 @@ def evaluate(ner_config, after_training):
                             "old_metric": max_metric,
                             "new_metric": cur_f1,
                             "update_model": after_training}, ignore_index=True)
-            if after_training:
-                model_path = ner_config["metadata"]["variables"]["MODEL_PATH"]
-                new_model_path = Path(f'{model_path}_new')
-                model_path = str(expand_path(model_path))
-                shutil.rmtree(model_path)
-                logger.warning(f'{model_path} removed')
-                new_model_path.rename(model_path)
-                logger.warning(f'{new_model_path} with trained model renamed to {model_path}')
+            replace_model = True
     else:
         df = pd.DataFrame.from_dict({"time": [datetime.datetime.now()],
                                      "old_metric": [cur_f1],
                                      "new_metric": [cur_f1],
                                      "update_model": [after_training]})
+        replace_model = True
+
+    if after_training and replace_model:
+        model_path = ner_config["metadata"]["variables"]["MODEL_PATH"]
+        new_model_path = Path(f'{model_path}_new')
+        model_path = str(expand_path(model_path))
+        shutil.rmtree(model_path)
+        logger.warning(f'{model_path} removed')
+        new_model_path.rename(model_path)
+        logger.warning(f'{new_model_path} with trained model renamed to {model_path}')
+
     df.to_csv(metrics_filename, index=False)
 
     return cur_f1
