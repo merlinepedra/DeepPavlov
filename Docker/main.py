@@ -6,6 +6,7 @@ from logging import getLogger
 from pathlib import Path
 
 import pandas as pd
+import torch
 from filelock import FileLock
 
 from deeppavlov import train_model, evaluate_model
@@ -44,6 +45,7 @@ def evaluate(ner_config, after_training):
         best_score = True
 
     df.to_csv(metrics_filename, index=False)
+    torch.cuda.empty_cache()
 
     return cur_f1, best_score
 
