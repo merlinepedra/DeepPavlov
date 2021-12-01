@@ -1,7 +1,7 @@
 import argparse
 import datetime
-import os
 import shutil
+from copy import deepcopy
 from logging import getLogger
 from pathlib import Path
 
@@ -9,7 +9,7 @@ import pandas as pd
 from filelock import FileLock
 
 from deeppavlov import train_model, evaluate_model
-from deeppavlov.core.commands.utils import parse_config, expand_path
+from deeppavlov.core.commands.utils import parse_config
 
 DATA_PATH = Path('/data')
 LOCKFILE = DATA_PATH / 'lockfile'
@@ -25,7 +25,7 @@ def evaluate(ner_config, after_training):
 
     metrics = dict(res["test"])
     cur_f1 = metrics["ner_f1"]
-    replace_model = False
+    best_score = False
 
     if Path(metrics_filename).exists():
         df = pd.read_csv(metrics_filename)
@@ -35,38 +35,30 @@ def evaluate(ner_config, after_training):
                             "old_metric": max_metric,
                             "new_metric": cur_f1,
                             "update_model": after_training}, ignore_index=True)
-            replace_model = True
+            best_score = True
     else:
         df = pd.DataFrame.from_dict({"time": [datetime.datetime.now()],
                                      "old_metric": [cur_f1],
                                      "new_metric": [cur_f1],
                                      "update_model": [after_training]})
-        replace_model = True
-
-    if after_training and replace_model:
-        model_path = ner_config["metadata"]["variables"]["MODEL_PATH"]
-        new_model_path = Path(f'{model_path}_new')
-        model_path = str(expand_path(model_path))
-        shutil.rmtree(model_path)
-        logger.warning(f'{model_path} removed')
-        new_model_path.rename(model_path)
-        logger.warning(f'{new_model_path} with trained model renamed to {model_path}')
+        best_score = True
 
     df.to_csv(metrics_filename, index=False)
 
-    return cur_f1
+    return cur_f1, best_score
 
 
 def train(data_path: str = ''):
+    config = deepcopy(ner_config)
     if data_path:
-        ner_config["dataset_reader"] = {
+        config["dataset_reader"] = {
             "class_name": "sq_reader",
             "data_path": data_path
         }
     init_path = next(
-        i for i in ner_config['metadata']['download'] if 'ner_rus_distilbert_torch.tar.gz' in i['url']
+        i for i in config['metadata']['download'] if 'ner_rus_distilbert_torch.tar.gz' in i['url']
     )['subdir']
-    model_path = ner_config["metadata"]["variables"]["MODEL_PATH"]
+    model_path = config["metadata"]["variables"]["MODEL_PATH"]
     new_model_path = Path(f'{model_path}_new')
     model_path = Path(model_path)
 
@@ -74,19 +66,27 @@ def train(data_path: str = ''):
         shutil.rmtree(new_model_path)
     shutil.copytree(init_path, new_model_path)
 
-    ner_config["metadata"]["variables"]["MODEL_PATH"] = str(new_model_path)
+    config["metadata"]["variables"]["MODEL_PATH"] = str(new_model_path)
 
-    for i in range(len(ner_config["chainer"]["pipe"])):
-        if ner_config["chainer"]["pipe"][i].get("class_name", "") == "torch_transformers_sequence_tagger":
-            ner_config['chainer']['pipe'][i]['load_path'] = ner_config['chainer']['pipe'][i]['load_path'].replace(str(model_path),
-                                                                                                                  str(new_model_path))
-            ner_config['chainer']['pipe'][i]['save_path'] = ner_config['chainer']['pipe'][i]['save_path'].replace(str(model_path),
-                                                                                                                  str(new_model_path))
-            logger.warning(f"load path {ner_config['chainer']['pipe'][i]['load_path']}"
-                           f"save path {ner_config['chainer']['pipe'][i]['save_path']}")
-    train_model(ner_config)
+    for i in range(len(config["chainer"]["pipe"])):
+        if config["chainer"]["pipe"][i].get("class_name", "") == "torch_transformers_sequence_tagger":
+            config['chainer']['pipe'][i]['load_path'] = config['chainer']['pipe'][i]['load_path'].replace(str(model_path),
+                                                                                                          str(new_model_path))
+            config['chainer']['pipe'][i]['save_path'] = config['chainer']['pipe'][i]['save_path'].replace(str(model_path),
+                                                                                                          str(new_model_path))
+            logger.warning(f"load path {config['chainer']['pipe'][i]['load_path']}"
+                           f"save path {config['chainer']['pipe'][i]['save_path']}")
+    train_model(config)
     logger.warning('Training finished. Starting evaluation...')
-    _ = evaluate(ner_config, True)
+    cur_f1, best_score = evaluate(config, True)
+
+    if best_score:
+        logger.warning(f'Model score is increased after training. Replacing old model with the new one.')
+        shutil.rmtree(model_path)
+        logger.warning(f'{model_path} removed')
+        new_model_path.rename(model_path)
+        logger.warning(f'{new_model_path} with trained model renamed to {model_path}')
+
     logger.warning('Training finished.')
 
 

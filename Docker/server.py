@@ -134,7 +134,7 @@ async def model_testing(fl: Optional[UploadFile] = File(None)):
             "class_name": "sq_reader",
             "data_path": new_filename
         }
-    cur_ner_f1 = evaluate(ner_config, False)
+    cur_ner_f1, _ = evaluate(ner_config, False)
 
     return {"metrics": cur_ner_f1}
 
