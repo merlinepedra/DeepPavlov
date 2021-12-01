@@ -30,17 +30,17 @@ def evaluate(ner_config, after_training):
     if Path(metrics_filename).exists():
         df = pd.read_csv(metrics_filename)
         max_metric = max(df["old_metric"].max(), df["new_metric"].max())
+        df = df.append({"time": datetime.datetime.now(),
+                        "old_metric": max_metric,
+                        "new_metric": cur_f1,
+                        "update_model": cur_f1 > max_metric}, ignore_index=True)
         if cur_f1 > max_metric:
-            df = df.append({"time": datetime.datetime.now(),
-                            "old_metric": max_metric,
-                            "new_metric": cur_f1,
-                            "update_model": after_training}, ignore_index=True)
             best_score = True
     else:
         df = pd.DataFrame.from_dict({"time": [datetime.datetime.now()],
                                      "old_metric": [cur_f1],
                                      "new_metric": [cur_f1],
-                                     "update_model": [after_training]})
+                                     "update_model": [False]})
         best_score = True
 
     df.to_csv(metrics_filename, index=False)
