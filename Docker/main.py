@@ -36,12 +36,12 @@ def evaluate(ner_config, after_training):
                             "update_model": after_training}, ignore_index=True)
             if after_training:
                 model_path = ner_config["metadata"]["variables"]["MODEL_PATH"]
-                model_path_exp = str(expand_path(model_path))
-                files = os.listdir(model_path_exp)
-                new_model_path_exp = model_path_exp.strip("_new")
-                for fl in files:
-                    shutil.copy(f"{model_path_exp}/{fl}", new_model_path_exp)
-                shutil.rmtree(model_path_exp)
+                new_model_path = Path(f'{model_path}_new')
+                model_path = str(expand_path(model_path))
+                shutil.rmtree(model_path)
+                logger.warning(f'{model_path} removed')
+                new_model_path.rename(model_path)
+                logger.warning(f'{new_model_path} with trained model renamed to {model_path}')
     else:
         df = pd.DataFrame.from_dict({"time": [datetime.datetime.now()],
                                      "old_metric": [cur_f1],
@@ -73,18 +73,16 @@ def train(data_path: str = ''):
 
     for i in range(len(ner_config["chainer"]["pipe"])):
         if ner_config["chainer"]["pipe"][i].get("class_name", "") == "torch_transformers_sequence_tagger":
-            ner_config['chainer']['pipe'][i]['load_path'] = ner_config['chainer']['pipe'][i]['save_path'] = \
-                str(new_model_path)
-            logger.warning(f"load and save path {new_model_path}")
+            ner_config['chainer']['pipe'][i]['load_path'] = ner_config['chainer']['pipe'][i]['load_path'].replace(str(model_path),
+                                                                                                                  str(new_model_path))
+            ner_config['chainer']['pipe'][i]['save_path'] = ner_config['chainer']['pipe'][i]['save_path'].replace(str(model_path),
+                                                                                                                  str(new_model_path))
+            logger.warning(f"load path {ner_config['chainer']['pipe'][i]['load_path']}"
+                           f"save path {ner_config['chainer']['pipe'][i]['save_path']}")
     train_model(ner_config)
-    logger.info('Training finished. Starting evaluation...')
+    logger.warning('Training finished. Starting evaluation...')
     _ = evaluate(ner_config, True)
-    logger.info('Evaluation finished.')
-    shutil.rmtree(model_path)
-    logger.info(f'{model_path} removed')
-    new_model_path.rename(model_path)
-    logger.info(f'{new_model_path} with trained model renamed to {model_path}')
-    logger.info('Training finished.')
+    logger.warning('Training finished.')
 
 
 if __name__ == '__main__':

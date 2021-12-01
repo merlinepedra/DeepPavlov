@@ -70,7 +70,7 @@ async def get_metric():
 
 @app.post("/train")
 async def model_training(fl: Optional[UploadFile] = File(None)):
-    data_path = ''
+    data_path = "''"
     logger.info('Trying to start training')
     if fl:
         total_data = json.loads(await fl.read())
