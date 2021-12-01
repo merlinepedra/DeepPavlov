@@ -1,22 +1,22 @@
 import datetime
 import json
-import os
-import shutil
-import threading
+import subprocess
 from logging import getLogger
 from pathlib import Path
 from typing import Optional, List
 
 import pandas as pd
-import torch
 import uvicorn
 from fastapi import FastAPI, File, UploadFile
+from filelock import FileLock, Timeout
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException
 from starlette.middleware.cors import CORSMiddleware
 
-from deeppavlov import build_model, train_model, evaluate_model, deep_download
-from deeppavlov.core.commands.utils import parse_config, expand_path
+from deeppavlov import build_model, deep_download
+from deeppavlov.core.commands.utils import parse_config
 from initial_setup import initial_setup
+from main import evaluate, ner_config, metrics_filename, LOCKFILE, LOG_PATH
 
 logger = getLogger(__file__)
 app = FastAPI()
@@ -30,8 +30,7 @@ app.add_middleware(
     allow_headers=['*']
 )
 
-metrics_filename = "/src/metrics_score_history.csv"
-ner_config = parse_config("ner_rus_distilbert_torch.json")
+
 entity_detection_config = parse_config("ner_rus_vx_distil.json")
 
 deep_download("ner_rus_vx_distil.json")
@@ -54,61 +53,25 @@ async def model(payload: Payload):
     return res
 
 
-def evaluate(ner_config, after_training):
-    res = evaluate_model(ner_config)
-    logger.warning(f"metrics {res}")
-    
-    metrics = dict(res["test"])
-    cur_f1 = metrics["ner_f1"]
-    
-    if Path(metrics_filename).exists():
-        df = pd.read_csv(metrics_filename)
-        max_metric = max(df["old_metric"].max(), df["new_metric"].max())
-        if cur_f1 > max_metric:
-            df = df.append({"time": datetime.datetime.now(),
-                            "old_metric": max_metric,
-                            "new_metric": cur_f1,
-                            "update_model": after_training}, ignore_index=True)
-            if after_training:
-                model_path = ner_config["metadata"]["variables"]["MODEL_PATH"]
-                model_path_exp = str(expand_path(model_path))
-                files = os.listdir(model_path_exp)
-                new_model_path_exp = model_path_exp.strip("_new")
-                for fl in files:
-                    shutil.copy(f"{model_path_exp}/{fl}", new_model_path_exp)
-                shutil.rmtree(model_path_exp)
-    else:
-        df = pd.DataFrame.from_dict({"time": [datetime.datetime.now()],
-                                     "old_metric": [cur_f1],
-                                     "new_metric": [cur_f1],
-                                     "update_model": [after_training]})
-    df.to_csv(metrics_filename, index=False)
-    
-    return cur_f1
-
-
 @app.get('/last_train_metric')
 async def get_metric():
-    last_metrics = {}
+    last_metrics = {"success": False, "detail": "There is no metrics file. Call /evaluate to create"}
     if Path(metrics_filename).exists():
         df = pd.read_csv(metrics_filename)
         last_metrics = df.iloc[-1].to_dict()
         logger.warning(f"last_metrics {last_metrics}")
 
-    return {"success": True, "data": {"time": str(last_metrics["time"]),
-                                      "old_metric": float(last_metrics["old_metric"]),
-                                      "new_metric": float(last_metrics["new_metric"]),
-                                      "update_model": bool(last_metrics["update_model"])}}
+        last_metrics = {"success": True, "data": {"time": str(last_metrics["time"]),
+                                                  "old_metric": float(last_metrics["old_metric"]),
+                                                  "new_metric": float(last_metrics["new_metric"]),
+                                                  "update_model": bool(last_metrics["update_model"])}}
+    return last_metrics
 
 
-def train(ner_config):
-    train_model(ner_config)
-    cur_f1 = evaluate(ner_config, True)
-    torch.cuda.empty_cache()
-
-
-@app.get("/train")
+@app.post("/train")
 async def model_training(fl: Optional[UploadFile] = File(None)):
+    data_path = ''
+    logger.info('Trying to start training')
     if fl:
         total_data = json.loads(await fl.read())
         if isinstance(total_data, list):
@@ -117,53 +80,48 @@ async def model_training(fl: Optional[UploadFile] = File(None)):
         elif isinstance(total_data, dict) and "train" in total_data and "test" in total_data:
             train_data = total_data["train"]
             test_data = total_data["test"]
-        logger.warning(f"-------------- train data {len(train_data)} test data {len(test_data)}")
-        new_filename = "train_filename.json"
-        with open(new_filename, 'w', encoding="utf8") as out:
+        else:
+            raise HTTPException(status_code=400, detail="Train data should be either list with examples or dict with"
+                                                        "'train' and 'test' keys")
+        logger.info(f"train data {len(train_data)} test data {len(test_data)}")
+        data_path = "/tmp/train_filename.json"
+        with open(data_path, 'w', encoding="utf8") as out:
             json.dump({"train": train_data, "valid": test_data, "test": test_data},
                       out, indent=2, ensure_ascii=False)
-
-        ner_config["dataset_reader"] = {
-            "class_name": "sq_reader",
-            "data_path": new_filename
-        }
-
-    model_path = ner_config["metadata"]["variables"]["MODEL_PATH"]
-    old_path = model_path.split("/")[-1]
-    new_path = f"{old_path}_new"
-    model_path_exp = str(expand_path(model_path))
-    files = os.listdir(model_path_exp)
-
-    logger.warning(f"-------------- model_path {model_path_exp} files {files}")
-
-    #if os.path.isfile(f"{model_path_exp}_new"):
-    #    os.remove(myfile)
-    #if os.path.isdir(f"{model_path_exp}_new"):
-    #    shutil.rmtree(f"{model_path_exp}_new")
-    Path(f"{model_path_exp}_new").mkdir(parents=True, exist_ok=True)
-
-    for fl in files:
-        shutil.copy(f"{model_path_exp}/{fl}", f'{model_path_exp}_new')
-
-    ner_config["metadata"]["variables"]["MODEL_PATH"] = f"{model_path}_new"
-    logger.warning(f"-------------- model path {ner_config['metadata']['variables']['MODEL_PATH']}")
-    for i in range(len(ner_config["chainer"]["pipe"])):
-        if ner_config["chainer"]["pipe"][i].get("class_name", "") == "torch_transformers_sequence_tagger":
-            ner_config['chainer']['pipe'][i]['load_path'] = ner_config['chainer']['pipe'][i]['load_path'].replace(old_path, new_path)
-            ner_config['chainer']['pipe'][i]['save_path'] = ner_config['chainer']['pipe'][i]['save_path'].replace(old_path, new_path)
-            logger.warning(f"-------------- load path {ner_config['chainer']['pipe'][i]['load_path']}")
-            logger.warning(f"-------------- save path {ner_config['chainer']['pipe'][i]['save_path']}")
-
-    threading.Thread(target=train, args=(ner_config,)).start()
+    try:
+        with FileLock(LOCKFILE, timeout=1):
+            logfile = LOG_PATH / f'{datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}.log'
+            subprocess.Popen(['/bin/bash', '-c', f'python main.py {data_path}> {logfile} 2>&1'])
+    except Timeout:
+        logger.error("Can't start training since process is already running.")
+        return {"success": False, "message": "Предыдущее обучение не завершено."}
 
     return {"success": True, "message": "Обучение инициировано"}
 
 
-@app.get("/evaluate")
+@app.get('/status')
+async def proba():
+    """Returns status of training process.
+    Update functions use filelock to prevent starting multiple training processes simultaneously. In the end training
+    function removes lock file. To check training process status this function checks if lockfile exists and
+    either it acquired or not.
+    """
+    if LOCKFILE.exists():
+        try:
+            with FileLock(LOCKFILE, timeout=0.01):
+                message = 'failed'
+        except Timeout:
+            message = 'running'
+    else:
+        message = 'finished sucessfully'
+    return {'success': True, 'message': message}
+
+
+@app.post("/evaluate")
 async def model_testing(fl: Optional[UploadFile] = File(None)):
     if fl:
         test_data = json.loads(await fl.read())
-        new_filename = "test_filename.json"
+        new_filename = "/tmp/test_filename.json"
         with open(new_filename, 'w', encoding="utf8") as out:
             if isinstance(test_data, list):
                 json.dump({"train": [], "valid": [], "test": test_data},
