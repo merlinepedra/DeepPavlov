@@ -1286,17 +1286,17 @@ class CopyDefineIndInferPostprocessor(Component):
     def __init__(self, **kwargs) -> None:
         self.morph = pymorphy2.MorphAnalyzer()
     
-    def __call__(self, copy_pred_batch, copy_conf_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch,
+    def __call__(self, target_known_batch, copy_pred_batch, copy_conf_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch,
                        topic_token_dict_batch, token_dict_batch, sent_pred_batch, entities_ind_sent_batch):
         model_output_batch = []
-        for copy_pred, copy_conf, topic_pred_list, topics_with_probs, token_ind_list, topic_token_dict, token_dict, \
+        for target_known, copy_pred, copy_conf, topic_pred_list, topics_with_probs, token_ind_list, topic_token_dict, token_dict, \
                 sent_pred, entities_ind_sent in \
-                zip(copy_pred_batch, copy_conf_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch,
+                zip(target_known_batch, copy_pred_batch, copy_conf_batch, topic_pred_batch, topics_with_probs_batch, token_ind_batch,
                     topic_token_dict_batch, token_dict_batch, sent_pred_batch, entities_ind_sent_batch):
             topics = []
             nouns = []
             sent_list = []
-            if copy_pred == 1:
+            if copy_pred == 1 and target_known:
                 probs_dict = {}
                 for ind in topic_pred_list:
                     for topic, topic_indices in topic_token_dict.items():
@@ -1319,8 +1319,10 @@ class CopyDefineIndInferPostprocessor(Component):
                         if token_ind - 19 in ind_list:
                             sent_list.append((token, token_sent))
                 sent_list = [(token, token_sent) for token, token_sent in sent_list if token in nouns]
-            else:
+            elif target_known:
                 copy_conf = 1.0 - copy_conf
+            else:
+                copy_conf = 0.0
             model_output = (copy_pred, copy_conf, topics, nouns, sent_list)
             model_output_batch.append(model_output)
         return model_output_batch

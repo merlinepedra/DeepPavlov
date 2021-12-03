@@ -23,13 +23,12 @@ class DomainPreprocessor(Component):
         self.topics_matrix = np.array(topics_list)
     
     def __call__(self, sources, targets, sources_topics, targets_topics):
-        source_ids, target_ids = [], []
+        source_ids, target_ids, target_known = [], [], []
         for source, target, source_topic, target_topic in \
                 zip(sources, targets, sources_topics, targets_topics):
             if source in self.domain_to_ind:
                 source_id = self.domain_to_ind[source]
             elif source_topic:
-                print("using source topics")
                 dot_products = np.sum(self.topics_matrix * np.array([source_topic]))
                 max_domain_n = np.argmax(dot_products)
                 max_domain = self.n_to_domain[max_domain_n]
@@ -39,15 +38,18 @@ class DomainPreprocessor(Component):
             
             if target in self.domain_to_ind:
                 target_id = self.domain_to_ind[target]
+                target_known.append(True)
             elif target_topic:
                 dot_products = np.sum(self.topics_matrix * np.array([target_topic]))
                 max_domain_n = np.argmax(dot_products)
                 max_domain = self.n_to_domain[max_domain_n]
                 target_id = self.domain_to_ind[max_domain]
+                target_known.append(True)
             else:
                 target_id = 0
+                target_known.append(False)
             
             source_ids.append(source_id)
             target_ids.append(target_id)
         
-        return source_ids, target_ids
+        return source_ids, target_ids, target_known
