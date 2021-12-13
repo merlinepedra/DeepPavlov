@@ -44,7 +44,8 @@ def evaluate(ner_config, after_training):
                                      "update_model": [False]})
         best_score = True
 
-    df.to_csv(metrics_filename, index=False)
+    if after_training:
+        df.to_csv(metrics_filename, index=False)
     torch.cuda.empty_cache()
 
     return cur_f1, best_score
