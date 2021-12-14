@@ -51,64 +51,102 @@ def accuracy(y_true: [list, np.ndarray], y_predicted: [list, np.ndarray]) -> flo
     return correct / examples_len if examples_len else 0
 
 
-@register_metric('domain_acc')
-def domain_acc(class_true_batch, token_true_batch, topic_true_batch, y_predicted) -> float:
-    
+def domain_acc_func(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch, y_predicted) -> float:
     num_correct = 0
-    for (class_pred, topic_pred, token_pred), class_true, topic_true, token_true in \
+    class_pred_list, class_true_list = [], []
+    for (class_pred, topic_pred, token_pred, sent_pred), class_true, topic_true, token_true in \
             zip(y_predicted, class_true_batch, topic_true_batch, token_true_batch):
+        class_pred_list.append(class_pred)
+        class_true_list.append(class_true)
         if class_pred == class_true:
             num_correct += 1
     num_total = len(y_predicted)
     return round(num_correct / num_total, 4)
 
 
-@register_metric('topic_acc')
-def topic_acc(class_true_batch, token_true_batch, topic_true_batch, y_predicted) -> float:
-
+def topic_acc_func(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch, y_predicted) -> float:
     num_correct, num_pred, num_total = 0, 0, 0
-    for (class_pred, topic_pred, token_pred), class_true, topic_true, token_true in \
+    for (class_pred, topic_pred, token_pred, sent_pred), class_true, topic_true, token_true in \
             zip(y_predicted, class_true_batch, topic_true_batch, token_true_batch):
-        num_correct += len(set(topic_pred).intersection(set(topic_true)))
-        num_total += len(topic_true)
-        num_pred += len(topic_pred)
-        
-    precision = num_correct / num_pred
-    recall = num_correct / num_total
-    f1 = 2 * precision * recall / (precision + recall)
+        if int(class_pred) == 1:
+            num_correct += len(set(topic_pred).intersection(set(topic_true)))
+            num_total += len(topic_true)
+            num_pred += len(topic_pred)
+    
+    if num_pred > 0:
+        precision = num_correct / num_pred
+    else:
+        precision = 0.0
+    if num_total > 0:
+        recall = num_correct / num_total
+    else:
+        recall = 0.0
+    if precision + recall > 0.0:
+        f1 = 2 * precision * recall / (precision + recall)
+    else:
+        f1 = 0.0
     
     return round(f1, 4)
 
 
-@register_metric('token_acc')
-def token_acc(class_true_batch, token_true_batch, topic_true_batch, y_predicted) -> float:
-
+def token_acc_func(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch, y_predicted) -> float:
     num_correct, num_pred, num_total = 0, 0, 0
-    out = open("token_acc.txt", 'a')
-    out.write(str(token_true_batch[:2])+'\n')
-    out.write(str([elem[2] for elem in y_predicted][:2])+'\n')
-    out.write("_"*60+'\n\n')
-    out.close()
-    for (class_pred, topic_pred, token_pred), class_true, topic_true, token_true in \
+    for (class_pred, topic_pred, token_pred, sent_pred), class_true, topic_true, token_true in \
             zip(y_predicted, class_true_batch, topic_true_batch, token_true_batch):
-        token_pred = set([morph.parse(tok.lower())[0].normal_form for tok in token_pred])
-        token_true = set([morph.parse(tok.lower())[0].normal_form for tok in token_true])
-        num_correct += len(token_pred.intersection(token_true))
-        num_total += len(token_true)
-        num_pred += len(token_pred)
+        if int(class_pred) == 1:
+            token_pred = set([morph.parse(tok.lower())[0].normal_form for tok in token_pred])
+            token_true = set([morph.parse(tok.lower())[0].normal_form for tok in token_true])
+            num_correct += len(token_pred.intersection(token_true))
+            num_total += len(token_true)
+            num_pred += len(token_pred)
     
-    if num_pred == 0:
-        precision = 0
-    else:
+    if num_pred > 0:
         precision = num_correct / num_pred
-    
-    recall = num_correct / num_total
+    else:
+        precision = 0
+    if num_total > 0:
+        recall = num_correct / num_total
+    else:
+        recall = 0
     if precision + recall == 0.0:
         f1 = 0.0
     else:
         f1 = 2 * precision * recall / (precision + recall)
     
     return round(f1, 4)
+
+
+@register_metric('domain_acc')
+def domain_acc(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch, y_predicted):
+    return domain_acc_func(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch, y_predicted)
+
+
+@register_metric('topic_acc')
+def topic_acc(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch, y_predicted):
+    return topic_acc_func(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch, y_predicted)
+
+
+@register_metric('token_acc')
+def token_acc(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch, y_predicted):
+    return token_acc_func(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch, y_predicted)
+
+
+@register_metric('domain_acc2')
+def domain_acc2(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch,
+                topic_labels, token_labels, y_predicted):
+    return domain_acc_func(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch, y_predicted)
+
+
+@register_metric('topic_acc2')
+def topic_acc2(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch,
+               topic_labels, token_labels, y_predicted):
+    return topic_acc_func(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch, y_predicted)
+
+
+@register_metric('token_acc2')
+def token_acc2(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch,
+               topic_labels, token_labels, y_predicted):
+    return token_acc_func(class_true_batch, token_true_batch, topic_true_batch, sentiment_batch, y_predicted)
 
 
 @register_metric('multitask_accuracy')
