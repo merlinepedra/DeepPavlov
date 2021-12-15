@@ -38,7 +38,7 @@
       },
       {
         "class_name": "copy_define_postprocessor",
-        "in": ["copy_or_not", "topic_pred", "token_pred", "topic_token_dict", "token_dict", "sent_pred"],
+        "in": ["copy_or_not", "copy_or_not_conf", "topic_pred", "token_pred", "topic_token_dict", "token_dict", "sent_pred"],
         "out": ["model_output"]
       }
     ],
@@ -47,8 +47,8 @@
   "train": {
     "epochs": 50,
     "batch_size": 6,
-    "train_metrics": ["domain_acc", "topic_acc", "token_acc"],
-    "metrics": ["domain_acc", "topic_acc", "token_acc"],
+    "train_metrics": ["domain_acc", "topic_acc", "token_acc", "mse"],
+    "metrics": ["domain_acc", "topic_acc", "token_acc", "mse"],
     "validation_patience": 8,
     "val_every_n_batches": 50,
     "log_every_n_batches": 50,
@@ -59,7 +59,7 @@
   },
   "metadata": {
     "variables": {
-      "ROOT_PATH": "~/.deeppavlov",
+      "ROOT_PATH": "/archive/evseev/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
       "TRANSFORMER": "DeepPavlov/rubert-base-cased",

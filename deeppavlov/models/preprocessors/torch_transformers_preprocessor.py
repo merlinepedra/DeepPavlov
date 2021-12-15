@@ -1214,13 +1214,15 @@ class CopyDefinePostprocessor(Component):
     def __init__(self, **kwargs) -> None:
         self.morph = pymorphy2.MorphAnalyzer()
     
-    def __call__(self, class_pred_batch, topic_ind_batch, token_ind_batch, topic_token_dict_batch, token_dict_batch, sent_pred_batch):
+    def __call__(self, copy_or_not_pred_batch, copy_or_not_conf_batch, topic_ind_batch, token_ind_batch,
+                       topic_token_dict_batch, token_dict_batch, sent_pred_batch):
         model_output_batch = []
-        for class_pred, topic_ind_list, token_ind_list, topic_token_dict, token_dict, sent_pred in \
-                zip(class_pred_batch, topic_ind_batch, token_ind_batch, topic_token_dict_batch, token_dict_batch, sent_pred_batch):
+        for copy_or_not_pred, copy_or_not_conf, topic_ind_list, token_ind_list, topic_token_dict, token_dict, sent_pred in \
+                zip(copy_or_not_pred_batch, copy_or_not_conf_batch, topic_ind_batch, token_ind_batch,
+                    topic_token_dict_batch, token_dict_batch, sent_pred_batch):
             topics = []
             nouns = []
-            if class_pred == 1:
+            if copy_or_not_pred == 1:
                 for topic_ind in topic_ind_list:
                     for topic, ind_list in topic_token_dict.items():
                         if topic_ind in ind_list:
@@ -1231,7 +1233,7 @@ class CopyDefinePostprocessor(Component):
                         if token_ind in ind_list and self.morph.parse(token)[0].tag.POS == "NOUN":
                             nouns.append(token)
                             break
-            model_output = (class_pred, topics, nouns, sent_pred)
+            model_output = (copy_or_not_pred, copy_or_not_conf, topics, nouns, sent_pred)
             model_output_batch.append(model_output)
         return model_output_batch
 
