@@ -21,8 +21,8 @@
     "class_name": "huggingface_dataset_reader",
     "path": "json",
     "data_files": {
-      "train": "/cephfs/home/adorkin/lab/mt/1m/ranker_train.jsonl",
-      "validation": "/cephfs/home/adorkin/lab/mt/1m/ranker_test.jsonl"
+      "train": "/data/ranker_train.jsonl",
+      "validation": "/data/ranker_test.jsonl"
     },
     "train": "train",
     "valid": "validation"
