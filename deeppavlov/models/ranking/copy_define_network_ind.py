@@ -163,8 +163,8 @@ class CopyDefineModelInd(TorchModel):
             copy_or_not = copy_or_not.cpu().numpy()
             copy_or_not_conf = copy_or_not_conf.cpu().numpy()
             
-            if (isinstance(topic_softmax_scores, torch.Tensor) and isinstance(token_softmax_scores, torch.Tensor)) or \
-                    (topic_softmax_scores and token_softmax_scores):
+            if (isinstance(topic_softmax_scores, torch.Tensor) or topic_softmax_scores) \
+                    and (isinstance(token_softmax_scores, torch.Tensor) or token_softmax_scores):
                 topic_preds = torch.argmax(topic_softmax_scores, dim=2).cpu().numpy().tolist()
                 token_preds = torch.argmax(token_softmax_scores, dim=2).cpu().numpy().tolist()
                 for topic_ind, topic_pred in zip(topic_inds, topic_preds):
@@ -476,7 +476,7 @@ class CopyDefineNetwork(nn.Module):
             cls_loss = ce_loss_fct(cls_logits, cls_labels)
             
             total_loss = 0.0
-            if all([elem == 1 for elem in cls_labels]):
+            if all([int(elem) == 1 for elem in cls_labels]):
                 if not isinstance(sent_logits, list):
                     active_loss = sent_att_mask_batch.view(-1) == 1
                     active_logits = sent_logits.view(-1, 5)

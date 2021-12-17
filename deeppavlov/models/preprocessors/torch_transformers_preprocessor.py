@@ -675,20 +675,24 @@ class AdoptingIndPreprocessor(Component):
                     if matches == len(entity_tokens):
                         entity_inters_pos_list.append((i, i + len(entity_tokens)))
                         found_inters_tokens.append(text_tokens[i:i+len(entity_tokens)])
+            
             found_inters_tokens_batch.append(found_inters_tokens)
             
             tm4 = time.time()
             
             label_add_tokens = []
+            ner_tokens_ind = set()
             for i in range(len(text_tokens)):
                 if i in entity_start_pos_list:
                     doc_wordpiece_tokens.append("<ner>")
                     ind += 1
                     entity_tok_cnt += 1
+                    ner_tokens_ind.add(i)
                 elif i in entity_end_pos_list:
                     doc_wordpiece_tokens.append("</ner>")
                     ind += 1
                     entity_tok_cnt += 1
+                    ner_tokens_ind.add(i)
                 if i in entity_sent_start_pos_list and len(doc_wordpiece_tokens) < 485:
                     entity_sent_ind_list.append(len(doc_wordpiece_tokens))
                 word_tokens = self.tokenizer.tokenize(text_tokens[i])
@@ -725,9 +729,23 @@ class AdoptingIndPreprocessor(Component):
             tm5 = time.time()
             
             pos_token_ind = sorted(list(set(pos_token_ind)))
-            neg_token_ind = sorted(list(set(neg_token_ind)))
-            if len(pos_token_ind) > len(neg_token_ind):
+            #neg_token_ind = sorted(list(set(neg_token_ind)))
+            neg_token_ind = []
+            
+            if len(pos_token_ind) > len(neg_token_ind) and len(neg_token_ind) > 0:
                 pos_token_ind = pos_token_ind[:len(neg_token_ind)]
+            elif len(pos_token_ind) > len(neg_token_ind) and len(neg_token_ind) == 0:
+                for kk in range(len(pos_token_ind)):
+                    num_iter = 0
+                    chosen_num = -1
+                    while True:
+                        chosen_num = random.randint(0, len(text_tokens))
+                        num_iter += 1
+                        if (chosen_num not in ner_tokens_ind and chosen_num not in pos_token_ind) or num_iter >= 10:
+                            break
+                    if chosen_num != -1:
+                        neg_token_ind.append(chosen_num)
+                        ner_tokens_ind.add(chosen_num)
             else:
                 neg_token_ind = neg_token_ind[:len(pos_token_ind)]
                     
