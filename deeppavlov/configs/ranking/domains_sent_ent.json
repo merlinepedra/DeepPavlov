@@ -62,13 +62,17 @@
       "ROOT_PATH": "~/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
-      "TRANSFORMER": "DeepPavlov/rubert-base-cased",
+      "TRANSFORMER": "{DOWNLOADS_PATH}/torch_bert_models/rubert_base_cased",
       "MODEL_PATH": "{MODELS_PATH}/copy_define_ent"
       },
     "download": [
       {
         "url": "http://files.deeppavlov.ai/deeppavlov_data/domain_graph/domain_dataset_ent.pickle",
         "subdir": "{DOWNLOADS_PATH}/domains"
+      },
+      {
+        "url": "http://files.deeppavlov.ai/deeppavlov_data/entity_linking/rubert_base_cased.tar.gz",
+        "subdir": "{DOWNLOADS_PATH}/torch_bert_models/rubert_base_cased"
       },
       {
         "url": "http://files.deeppavlov.ai/deeppavlov_data/domain_graph/copy_define_ent.tar.gz",
