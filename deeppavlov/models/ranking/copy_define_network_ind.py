@@ -468,7 +468,10 @@ class CopyDefineNetwork(nn.Module):
         
         total_loss = None
         if sentiment is not None:
-            sentiment = torch.LongTensor(sentiment).to(self.device) 
+            try:
+                sentiment = torch.LongTensor(sentiment).to(self.device)
+            except:
+                sentiment = None
             topic_labels = torch.LongTensor(topic_labels).to(self.device)
             token_labels = torch.LongTensor(token_labels).to(self.device)
             
@@ -477,7 +480,7 @@ class CopyDefineNetwork(nn.Module):
             
             total_loss = 0.0
             if all([int(elem) == 1 for elem in cls_labels]):
-                if not isinstance(sent_logits, list):
+                if sentiment is not None and not isinstance(sent_logits, list):
                     active_loss = sent_att_mask_batch.view(-1) == 1
                     active_logits = sent_logits.view(-1, 5)
                     active_labels = torch.where(
@@ -505,6 +508,7 @@ class CopyDefineNetwork(nn.Module):
                     total_loss += token_loss
             else:
                 total_loss = cls_loss
+            print("total_loss", total_loss)
 
         if sentiment is not None:
             return total_loss, cls_logits, topic_logits, token_logits, sent_logits
@@ -519,11 +523,14 @@ class CopyDefineNetwork(nn.Module):
             encoder_state_dict = self.encoder.module.encoder.state_dict()
         else:
             encoder_state_dict = self.encoder.encoder.state_dict()
+        
         torch.save({"encoder_state_dict": encoder_state_dict,
                     "cls_state_dict": self.bilinear_cls.state_dict(),
                     "topic_state_dict": self.bilinear_topic.state_dict(),
                     "token_state_dict": self.bilinear_token.state_dict(),
                     "sent_state_dict": self.bilinear_sent.state_dict()}, encoder_weights_path)
+        #torch.save({"encoder_state_dict": encoder_state_dict,
+        #            "cls_state_dict": self.bilinear_cls.state_dict()}, encoder_weights_path)
         emb_weights_path = str(expand_path(self.emb_save_path))
         indices = [i for i in range(862)]
         indices = torch.LongTensor(indices).to(self.device)
@@ -542,13 +549,16 @@ class CopyDefineNetwork(nn.Module):
             log.info(f"--------------- Loading encoder to {encoder_weights_path}.")
             checkpoint = torch.load(encoder_weights_path, map_location=self.device)
             if self.devices is None:
-                self.encoder.encoder.load_state_dict(checkpoint["encoder_state_dict"])
+                self.encoder.encoder.load_state_dict(checkpoint["encoder_state_dict"], strict=False)
             else:
-                self.encoder.module.encoder.load_state_dict(checkpoint["encoder_state_dict"])
-            self.bilinear_cls.load_state_dict(checkpoint["cls_state_dict"])
-            self.bilinear_topic.load_state_dict(checkpoint["topic_state_dict"])
-            self.bilinear_token.load_state_dict(checkpoint["token_state_dict"])
-            self.bilinear_sent.load_state_dict(checkpoint["sent_state_dict"])
+                self.encoder.module.encoder.load_state_dict(checkpoint["encoder_state_dict"], strict=False)
+            self.bilinear_cls.load_state_dict(checkpoint["cls_state_dict"], strict=False)
+            if "topic_state_dict" in checkpoint:
+                self.bilinear_topic.load_state_dict(checkpoint["topic_state_dict"], strict=False)
+            if "token_state_dict" in checkpoint:
+                self.bilinear_token.load_state_dict(checkpoint["token_state_dict"], strict=False)
+            if "sent_state_dict" in checkpoint:
+                self.bilinear_sent.load_state_dict(checkpoint["sent_state_dict"], strict=False)
             
         self.encoder.to(self.device)
         self.bilinear_cls.to(self.device)
