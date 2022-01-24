@@ -2,7 +2,6 @@
   "dataset_reader": {
     "class_name": "in_batch_ranking_reader",
     "valid_size": 400,
-    "remove_duplicates": true,
     "data_path": "{DOWNLOADS_PATH}/domains/domain_dataset_aug.pickle"
   },
   "dataset_iterator": {
@@ -33,7 +32,7 @@
         "emb_save_path": "{MODEL_PATH}",
         "model_name": "copy_define_model",
         "pretrained_bert": "{TRANSFORMER}",
-        "learning_rate_drop_patience": 10,
+        "learning_rate_drop_patience": 15,
         "learning_rate_drop_div": 1.5,
         "num_embeddings": 862
       },
@@ -48,9 +47,9 @@
   "train": {
     "epochs": 50,
     "batch_size": 8,
-    "train_metrics": ["topic_acc", "domain_f1", "domain_acc", "token_acc", "mse"],
-    "metrics": ["topic_acc", "domain_f1", "domain_acc", "token_acc", "mse"],
-    "validation_patience": 18,
+    "train_metrics": ["domain_acc", "domain_topic_acc", "topic_acc", "domain_f1", "token_acc", "mse"],
+    "metrics": ["domain_acc", "domain_topic_acc", "topic_acc", "domain_f1", "token_acc", "mse"],
+    "validation_patience": 30,
     "val_every_n_batches": 50,
     "log_every_n_batches": 50,
     "evaluation_targets": ["valid", "train"],
@@ -64,7 +63,7 @@
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
       "TRANSFORMER": "{DOWNLOADS_PATH}/torch_bert_models/rubert_base_cased",
-      "MODEL_PATH": "{MODELS_PATH}/copy_define_aug"
+      "MODEL_PATH": "{MODELS_PATH}/copy_define_ent_balanced_ddp_full"
       },
     "download": [
       {
