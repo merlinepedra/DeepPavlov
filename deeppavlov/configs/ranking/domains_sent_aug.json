@@ -47,8 +47,8 @@
   "train": {
     "epochs": 50,
     "batch_size": 8,
-    "train_metrics": ["domain_acc", "domain_topic_acc", "topic_acc", "domain_f1", "token_acc", "mse"],
-    "metrics": ["domain_acc", "domain_topic_acc", "topic_acc", "domain_f1", "token_acc", "mse"],
+    "train_metrics": ["domain_acc", "topic_acc", "token_acc", "mse"],
+    "metrics": ["domain_acc", "topic_acc", "token_acc", "mse"],
     "validation_patience": 30,
     "val_every_n_batches": 50,
     "log_every_n_batches": 50,
