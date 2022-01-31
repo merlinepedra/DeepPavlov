@@ -262,13 +262,16 @@ class CopyDefineNetwork(nn.Module):
             bert_config_file: str = None,
             device: str = "gpu",
             num_embeddings: int = 862,
-            devices: List[int] = None  
+            devices: List[int] = None
     ):
         super().__init__()
         self.num_embeddings = num_embeddings
         self.devices = devices
         if self.devices is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() and device == "gpu" else "cpu")
+            if isinstance(device, int):
+                self.device = torch.device(f"cuda:{device}")
+            else:
+                self.device = torch.device("cuda" if torch.cuda.is_available() and device == "gpu" else "cpu")
         else:
             self.device = torch.device(f"cuda:{self.devices[0]}")
         self.pretrained_bert = pretrained_bert
@@ -279,10 +282,12 @@ class CopyDefineNetwork(nn.Module):
         self.zero_vec = torch.Tensor(768)
         self.source_embeddings = nn.Embedding(self.num_embeddings, 384)
         self.target_embeddings = nn.Embedding(self.num_embeddings, 384)
+        self.all_info = True
         self.bilinear_cls = nn.Linear(768 * 8, 2)
-        self.bilinear_topic = nn.Linear(768 * 8, 2)
-        self.bilinear_token = nn.Linear(768 * 8, 2)
-        self.bilinear_sent = nn.Linear(768 * 8, 5)
+        if self.all_info:
+            self.bilinear_topic = nn.Linear(768 * 8, 2)
+            self.bilinear_token = nn.Linear(768 * 8, 2)
+            self.bilinear_sent = nn.Linear(768 * 8, 5)
         self.encoder = TextEncoder(pretrained_bert=self.pretrained_bert,
                                    bert_tokenizer_config_file=bert_tokenizer_config_file,
                                    bert_config_file=bert_config_file, device=self.device)
@@ -439,29 +444,30 @@ class CopyDefineNetwork(nn.Module):
         cls_logits = torch.squeeze(cls_logits, dim=1)
         cls_logits = F.softmax(cls_logits, 1)
         
-        topic_logits = []
-        if (isinstance(topics_batch, list) and topics_batch and topics_batch[0]) or isinstance(topics_batch, torch.Tensor):
-            topic_hidden = topics_batch.view(bs, -1, 96, 8)
-            bl_topic = (domain_embs1.unsqueeze(4) * topic_hidden.unsqueeze(3)).view(bs, -1, 768 * 8)
-            topic_logits = self.bilinear_topic(bl_topic)
-            topic_logits = F.softmax(topic_logits, 2)
-        
-        token_logits = []
-        if (isinstance(tokens_batch, list) and tokens_batch and tokens_batch[0]) or isinstance(tokens_batch, torch.Tensor):
-            token_hidden = tokens_batch.view(bs, -1, 96, 8)
-            bl_token = (domain_embs1.unsqueeze(4) * token_hidden.unsqueeze(3)).view(bs, -1, 768 * 8)
-            token_logits = self.bilinear_token(bl_token)
-            token_logits = F.softmax(token_logits, 2)
-        
-        if max_entities_sent_len > 0:
-            bl_sent = (domain_embs1.unsqueeze(4) * entities_sent_batch.unsqueeze(3)).view(bs, -1, 768 * 8)
-            sent_logits = self.bilinear_sent(bl_sent)
-        else:
-            sent_logits = []
-        
-        topic_att_mask_batch = torch.LongTensor(topic_att_mask_batch).to(self.device)
-        token_att_mask_batch = torch.LongTensor(token_att_mask_batch).to(self.device)
-        sent_att_mask_batch = torch.LongTensor(sent_att_mask_batch).to(self.device)
+        if self.all_info:
+            topic_logits = []
+            if (isinstance(topics_batch, list) and topics_batch and topics_batch[0]) or isinstance(topics_batch, torch.Tensor):
+                topic_hidden = topics_batch.view(bs, -1, 96, 8)
+                bl_topic = (domain_embs1.unsqueeze(4) * topic_hidden.unsqueeze(3)).view(bs, -1, 768 * 8)
+                topic_logits = self.bilinear_topic(bl_topic)
+                topic_logits = F.softmax(topic_logits, 2)
+            
+            token_logits = []
+            if (isinstance(tokens_batch, list) and tokens_batch and tokens_batch[0]) or isinstance(tokens_batch, torch.Tensor):
+                token_hidden = tokens_batch.view(bs, -1, 96, 8)
+                bl_token = (domain_embs1.unsqueeze(4) * token_hidden.unsqueeze(3)).view(bs, -1, 768 * 8)
+                token_logits = self.bilinear_token(bl_token)
+                token_logits = F.softmax(token_logits, 2)
+            
+            if max_entities_sent_len > 0:
+                bl_sent = (domain_embs1.unsqueeze(4) * entities_sent_batch.unsqueeze(3)).view(bs, -1, 768 * 8)
+                sent_logits = self.bilinear_sent(bl_sent)
+            else:
+                sent_logits = []
+            
+            topic_att_mask_batch = torch.LongTensor(topic_att_mask_batch).to(self.device)
+            token_att_mask_batch = torch.LongTensor(token_att_mask_batch).to(self.device)
+            sent_att_mask_batch = torch.LongTensor(sent_att_mask_batch).to(self.device)
         
         ce_loss_fct = nn.CrossEntropyLoss()
         self.tm_bilinear = time.time() - tm1
@@ -479,7 +485,7 @@ class CopyDefineNetwork(nn.Module):
             cls_loss = ce_loss_fct(cls_logits, cls_labels)
             
             total_loss = 0.0
-            if all([int(elem) == 1 for elem in cls_labels]):
+            if all([int(elem) == 1 for elem in cls_labels]) and self.all_info:
                 if sentiment is not None and not isinstance(sent_logits, list):
                     active_loss = sent_att_mask_batch.view(-1) == 1
                     active_logits = sent_logits.view(-1, 5)
@@ -508,13 +514,16 @@ class CopyDefineNetwork(nn.Module):
                     total_loss += token_loss
             else:
                 total_loss = cls_loss
-            print("total_loss", total_loss)
 
-        if sentiment is not None:
-            return total_loss, cls_logits, topic_logits, token_logits, sent_logits
+        if self.all_info:
+            if sentiment is not None:
+                return total_loss, cls_logits, topic_logits, token_logits, sent_logits
+            else:
+                return cls_logits, topic_logits, token_logits, sent_logits
         else:
-            return cls_logits, topic_logits, token_logits, sent_logits
-        
+            return total_loss, cls_logits
+    
+    
     def save(self) -> None:
         print("--------------------saving")
         encoder_weights_path = expand_path(self.encoder_save_path).with_suffix(f".pth.tar")
@@ -524,13 +533,15 @@ class CopyDefineNetwork(nn.Module):
         else:
             encoder_state_dict = self.encoder.encoder.state_dict()
         
-        torch.save({"encoder_state_dict": encoder_state_dict,
-                    "cls_state_dict": self.bilinear_cls.state_dict(),
-                    "topic_state_dict": self.bilinear_topic.state_dict(),
-                    "token_state_dict": self.bilinear_token.state_dict(),
-                    "sent_state_dict": self.bilinear_sent.state_dict()}, encoder_weights_path)
-        #torch.save({"encoder_state_dict": encoder_state_dict,
-        #            "cls_state_dict": self.bilinear_cls.state_dict()}, encoder_weights_path)
+        if self.all_info:
+            torch.save({"encoder_state_dict": encoder_state_dict,
+                        "cls_state_dict": self.bilinear_cls.state_dict(),
+                        "topic_state_dict": self.bilinear_topic.state_dict(),
+                        "token_state_dict": self.bilinear_token.state_dict(),
+                        "sent_state_dict": self.bilinear_sent.state_dict()}, encoder_weights_path)
+        else:
+            torch.save({"encoder_state_dict": encoder_state_dict,
+                        "cls_state_dict": self.bilinear_cls.state_dict()}, encoder_weights_path)
         emb_weights_path = str(expand_path(self.emb_save_path))
         indices = [i for i in range(862)]
         indices = torch.LongTensor(indices).to(self.device)
@@ -553,18 +564,20 @@ class CopyDefineNetwork(nn.Module):
             else:
                 self.encoder.module.encoder.load_state_dict(checkpoint["encoder_state_dict"], strict=False)
             self.bilinear_cls.load_state_dict(checkpoint["cls_state_dict"], strict=False)
-            if "topic_state_dict" in checkpoint:
-                self.bilinear_topic.load_state_dict(checkpoint["topic_state_dict"], strict=False)
-            if "token_state_dict" in checkpoint:
-                self.bilinear_token.load_state_dict(checkpoint["token_state_dict"], strict=False)
-            if "sent_state_dict" in checkpoint:
-                self.bilinear_sent.load_state_dict(checkpoint["sent_state_dict"], strict=False)
+            if self.all_info:
+                if "topic_state_dict" in checkpoint:
+                    self.bilinear_topic.load_state_dict(checkpoint["topic_state_dict"], strict=False)
+                if "token_state_dict" in checkpoint:
+                    self.bilinear_token.load_state_dict(checkpoint["token_state_dict"], strict=False)
+                if "sent_state_dict" in checkpoint:
+                    self.bilinear_sent.load_state_dict(checkpoint["sent_state_dict"], strict=False)
             
         self.encoder.to(self.device)
         self.bilinear_cls.to(self.device)
-        self.bilinear_topic.to(self.device)
-        self.bilinear_token.to(self.device)
-        self.bilinear_sent.to(self.device)
+        if self.all_info:
+            self.bilinear_topic.to(self.device)
+            self.bilinear_token.to(self.device)
+            self.bilinear_sent.to(self.device)
         
         emb_weights_path = str(expand_path(self.emb_save_path))
         init_emb_weights_path = f"{emb_weights_path}/init_domain_vectors.pickle"
