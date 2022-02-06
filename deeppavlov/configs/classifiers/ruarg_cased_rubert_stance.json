@@ -4,9 +4,9 @@
     "x": "text",
     "y": "stance",
     "class_sep": ",",
-    "sep": ";",
+    "sep": "\t",
     "data_path": "/home/dilyara.baymurzina/GitHub/RuArg/my_notebooks",
-    "train": "data_processed.csv"
+    "train": "data_processed.tsv"
   },
   "dataset_iterator": {
     "class_name": "basic_classification_iterator",
@@ -127,7 +127,7 @@
       {
         "name": "accuracy",
         "inputs": [
-          "н",
+          "y",
           "y_pred_labels"
         ]
       },
@@ -155,7 +155,7 @@
       "ROOT_PATH": "~/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
-      "MODEL_PATH": "{MODELS_PATH}/classifiers/ruarg_cased_rubert_stance_v0/"
+      "MODEL_PATH": "{MODELS_PATH}/classifiers/ruarg_cased_rubert_stance_v1/"
     },
     "download": [
       {
