@@ -152,7 +152,7 @@
       "ROOT_PATH": "~/.deeppavlov",
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
-      "MODEL_PATH": "{MODELS_PATH}/classifiers/ruarg_cased_rubert_stance_v1/"
+      "MODEL_PATH": "{MODELS_PATH}/classifiers/ruarg_cased_rubert_stance_v0/"
     },
     "download": [
       {
