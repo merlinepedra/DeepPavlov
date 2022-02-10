@@ -123,7 +123,14 @@ def redirect_root_to_docs(fast_app: FastAPI, func_name: str, endpoint: str, meth
         return response
 
 
-def interact(model: Chainer, payload: Dict[str, Optional[List]]) -> List:
+def interact(model: Chainer, payload: Dict[str, Optional[List]], transpose_batch: bool) -> List:
+    """Interact with model
+
+    :param model: DeepPavlov model
+    :param payload: model input
+    :param transpose_batch: transpose results if true, e.g. [[a1, a2], [b1, b2]] becomes [[a1, b1], [a2, b2]]
+    :return: model results
+    """
     model_args = payload.values()
     dialog_logger.log_in(payload)
     error_msg = None
@@ -146,7 +153,10 @@ def interact(model: Chainer, payload: Dict[str, Optional[List]]) -> List:
     prediction = model(*model_args)
     if len(model.out_params) == 1:
         prediction = [prediction]
-    prediction = list(zip(*prediction))
+
+    if transpose_batch:
+        prediction = list(zip(*prediction))
+
     result = jsonify_data(prediction)
     dialog_logger.log_out(result)
     return result
@@ -193,10 +203,13 @@ def start_model_server(model_config: Path,
 
     model_endpoint_post_example = {arg_name: ['string'] for arg_name in model_args_names}
 
-    @app.post(model_endpoint, summary='A model endpoint')
-    async def answer(item: Batch = Body(..., example=model_endpoint_post_example)) -> List:
+    @app.post(model_endpoint, summary='Model endpoint')
+    async def answer(
+            item: Batch = Body(..., example=model_endpoint_post_example),
+            transpose_batch: Optional[bool] = True,
+    ) -> List:
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, interact, model, item.dict())
+        return await loop.run_in_executor(None, interact, model, item.dict(), transpose_batch)
 
     @app.post('/probe', include_in_schema=False)
     async def probe(item: Batch) -> List[str]:
