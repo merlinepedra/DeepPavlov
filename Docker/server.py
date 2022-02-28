@@ -31,9 +31,9 @@ app.add_middleware(
 )
 
 
-entity_detection_config = parse_config("ner_rus_vx_distil.json")
+entity_detection_config = parse_config("ner_rus_vx_distil_lower.json")
 
-deep_download("ner_rus_vx_distil.json")
+deep_download("ner_rus_vx_distil_lower.json")
 initial_setup()
 
 entity_detection = build_model(entity_detection_config, download=False)

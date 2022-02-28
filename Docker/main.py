@@ -16,7 +16,7 @@ DATA_PATH = Path('/data')
 LOCKFILE = DATA_PATH / 'lockfile'
 LOG_PATH = DATA_PATH / 'logs'
 metrics_filename = DATA_PATH / "metrics_score_history.csv"
-ner_config = parse_config("ner_rus_distilbert_torch.json")
+ner_config = parse_config("ner_rus_distilbert_torch_lower.json")
 logger = getLogger(__file__)
 
 
@@ -59,7 +59,7 @@ def train(data_path: str = ''):
             "data_path": data_path
         }
     init_path = next(
-        i for i in config['metadata']['download'] if 'ner_rus_distilbert_torch.tar.gz' in i['url']
+        i for i in config['metadata']['download'] if 'ner_rus_distilbert_torch_lower.tar.gz' in i['url']
     )['subdir']
     model_path = config["metadata"]["variables"]["MODEL_PATH"]
     new_model_path = Path(f'{model_path}_new')
