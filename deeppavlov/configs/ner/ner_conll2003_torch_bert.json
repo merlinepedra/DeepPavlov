@@ -77,7 +77,7 @@
         "learning_rate_drop_patience": 30,
         "learning_rate_drop_div": 1.5,
         "load_before_drop": true,
-        "save_path": "{MODEL_PATH}/model",
+        "save_path": "{MODEL_PATH}/model_",
         "load_path": "{MODEL_PATH}/model",
         "in": [
           "x_subword_tok_ids",
@@ -108,7 +108,7 @@
   },
   "train": {
     "epochs": 30,
-    "batch_size": 16,
+    "batch_size": 2,
     "metrics": [
       {
         "name": "ner_f1",

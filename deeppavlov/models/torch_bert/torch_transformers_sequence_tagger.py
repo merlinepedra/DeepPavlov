@@ -187,9 +187,10 @@ def token_labels_to_subtoken_labels(labels, y_mask, input_mask):
             subtoken_labels += [labels[labels_ind]]
             labels_ind += 1
         else:
-            subtoken_labels += [labels[labels_ind - 1]]
+            #subtoken_labels += [labels[labels_ind - 1]]
+            subtoken_labels += [-100]
 
-    subtoken_labels = [0] + subtoken_labels + [0] * (len(input_mask) - n_tokens_with_special + 1)
+    subtoken_labels = [-100] + subtoken_labels + [-100] * (len(input_mask) - n_tokens_with_special + 1)
     return subtoken_labels
 
 
@@ -275,6 +276,7 @@ class TorchTransformersSequenceTagger(TorchModel):
         subtoken_labels = [token_labels_to_subtoken_labels(y_el, y_mask, input_mask)
                            for y_el, y_mask, input_mask in zip(y, y_masks, input_masks)]
         b_labels = torch.from_numpy(np.array(subtoken_labels)).to(torch.int64).to(self.device)
+
         self.optimizer.zero_grad()
 
         loss = self.model(input_ids=b_input_ids,
