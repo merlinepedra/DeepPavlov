@@ -53,6 +53,15 @@ def token_from_subtoken(units: torch.Tensor, mask: torch.Tensor) -> torch.Tensor
 
             the shape of this tensor will be [batch_size, TOKEN_seq_length, n_features]
     """
+
+    mask = mask.type(torch.uint8)
+    mask_bool = mask>0.5
+    num_words = torch.sum(mask_bool,-1)
+    max_1_idx = torch.max(torch.sum(mask_bool,-1))
+    selected_prob = [torch.Tensor.tolist(units[i][mask_bool[i]]) for i in range(mask_bool.size()[0])]
+    [selected_prob[i].extend([[0.0]*units.size()[-1]]*(max_1_idx-torch.sum(mask_bool[i]))) for i in range(len(selected_prob)) if torch.sum(mask_bool[i])<max_1_idx]
+    tensor = torch.Tensor(selected_prob)
+    return tensor
     shape = units.size()
     batch_size = shape[0]
     nf = shape[2]
@@ -338,6 +347,10 @@ class TorchTransformersSequenceTagger(TorchModel):
         if self.pretrained_bert:
             config = AutoConfig.from_pretrained(self.pretrained_bert, num_labels=self.n_classes,
                                                 output_attentions=False, output_hidden_states=False)
+            if self.attention_probs_keep_prob is not None:
+                config.attention_probs_dropout_prob = 1.0 - self.attention_probs_keep_prob
+            if self.hidden_keep_prob is not None:
+                config.hidden_dropout_prob = 1.0 - self.hidden_keep_prob
             self.model = AutoModelForTokenClassification.from_pretrained(self.pretrained_bert, config=config)
         elif self.bert_config_file and Path(self.bert_config_file).is_file():
             self.bert_config = AutoConfig.from_json_file(str(expand_path(self.bert_config_file)))
