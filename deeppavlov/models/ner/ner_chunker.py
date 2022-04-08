@@ -381,6 +381,7 @@ class NerChunkModel(Component):
         doc_sentences_offsets, doc_sentences = [], []
         cur_doc_num = 0
         text_len_sum = 0
+        cur_status = "ok"
         for entity_substr_batch, tags_batch, probas_batch, entity_offsets_batch, sentences_offsets_batch, \
             sentences_batch, text_len_batch, nums_batch, status in \
                 zip(entity_substr_batch_list, tags_batch_list, entity_probas_batch_list, entity_offsets_batch_list,
