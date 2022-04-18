@@ -44,11 +44,13 @@ def squad_v2_exact_match(y_true: List[List[str]], y_predicted: List[str]) -> flo
 def squad_v1_exact_match(y_true: List[List[str]], y_predicted: List[str]) -> float:
     """ Calculates Exact Match score between y_true and y_predicted
         EM score uses the best matching y_true answer:
-            if y_pred equal at least to one answer in y_true then EM = 1, else EM = 0
+        if y_pred equal at least to one answer in y_true then EM = 1, else EM = 0
         Skips examples without an answer.
+        
     Args:
         y_true: list of correct answers (correct answers are represented by list of strings)
         y_predicted: list of predicted answers
+
     Returns:
         exact match score : float
     """
@@ -106,9 +108,11 @@ def squad_v1_f1(y_true: List[List[str]], y_predicted: List[str]) -> float:
         F-1 score uses the best matching y_true answer
 
         Skips examples without an answer.
+
     Args:
         y_true: list of correct answers (correct answers are represented by list of strings)
         y_predicted: list of predicted answers
+        
     Returns:
         F-1 score : float
     """
