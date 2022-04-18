@@ -27,7 +27,7 @@
         "out": ["entity_substr", "entity_offsets", "tags", "sentences_offsets", "sentences", "probas", "status"]
       },
       {
-        "class_name": "ner_postprocessor",
+        "class_name": "ner_chunker:NerPostprocessor",
         "lemmatize": true,
         "in": ["x", "entity_substr", "entity_offsets", "tags", "sentences", "probas"],
         "out": ["new_entity_substr", "new_entity_lemm_substr", "new_entity_offsets", "new_entity_init_offsets", "new_tags", "new_probas"]
