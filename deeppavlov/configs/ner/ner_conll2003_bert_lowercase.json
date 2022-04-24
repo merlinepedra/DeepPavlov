@@ -6,7 +6,8 @@
       "provide_pos": false
     },
     "dataset_iterator": {
-      "class_name": "data_learning_iterator"
+      "class_name": "data_learning_iterator",
+      "seed": 42
     },
     "chainer": {
       "in": [
@@ -77,9 +78,10 @@
           "min_learning_rate": 1e-07,
           "learning_rate_drop_patience": 15,
           "learning_rate_drop_div": 1.5,
+          "seed": 42,
           "load_before_drop": true,
-          "save_path": "{MODEL_PATH}/model_large_doloweruncased",
-          "load_path": "{MODEL_PATH}/model_large_doloweruncased",
+          "save_path": "{MODEL_PATH}/model_large_doloweruncased_",
+          "load_path": "{MODEL_PATH}/model_large_doloweruncased_",
           "in": [
             "x_subword_tok_ids",
             "attention_mask",

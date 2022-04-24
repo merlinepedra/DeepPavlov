@@ -345,6 +345,8 @@ class TorchTransformersSequenceTagger(TorchModel):
         if fname is not None:
             self.load_path = fname
 
+        set_seed(self.seed)
+
         if self.pretrained_bert:
             config = AutoConfig.from_pretrained(self.pretrained_bert, num_labels=self.n_classes,
                                                 output_attentions=False, output_hidden_states=False)
