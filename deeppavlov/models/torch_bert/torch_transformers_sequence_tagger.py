@@ -19,7 +19,7 @@ from typing import List, Union, Dict, Optional
 import numpy as np
 import torch
 from overrides import overrides
-from transformers import AutoModelForTokenClassification, AutoConfig
+from transformers import AutoModelForTokenClassification, AutoConfig, set_seed
 
 from deeppavlov.core.commands.utils import expand_path
 from deeppavlov.core.common.errors import ConfigError
@@ -233,6 +233,7 @@ class TorchTransformersSequenceTagger(TorchModel):
                  clip_norm: Optional[float] = None,
                  min_learning_rate: float = 1e-07,
                  use_crf: bool = False,
+                 seed: int = 42,
                  **kwargs) -> None:
 
         self.n_classes = n_tags
@@ -244,6 +245,7 @@ class TorchTransformersSequenceTagger(TorchModel):
         self.pretrained_bert = pretrained_bert
         self.bert_config_file = bert_config_file
         self.use_crf = use_crf
+        self.seed = seed
 
         super().__init__(optimizer=optimizer,
                          optimizer_parameters=optimizer_parameters,
