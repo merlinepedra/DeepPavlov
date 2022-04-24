@@ -307,6 +307,7 @@ class TorchTransformersNerPreprocessor(Component):
                  token_masking_prob: float = 0.0,
                  provide_subword_tags: bool = False,
                  subword_mask_mode: str = "first",
+                 upper_lower_text: bool = False,
                  **kwargs):
         self._re_tokenizer = re.compile(r"[\w']+|[^\w ]")
         self.provide_subword_tags = provide_subword_tags
@@ -314,6 +315,7 @@ class TorchTransformersNerPreprocessor(Component):
         self.max_seq_length = max_seq_length
         self.max_subword_length = max_subword_length
         self.subword_mask_mode = subword_mask_mode
+        self.upper_lower_text = upper_lower_text
         if Path(vocab_file).is_file():
             vocab_file = str(expand_path(vocab_file))
             self.tokenizer = AutoTokenizer(vocab_file=vocab_file,
@@ -326,9 +328,17 @@ class TorchTransformersNerPreprocessor(Component):
                  tokens: Union[List[List[str]], List[str]],
                  tags: List[List[str]] = None,
                  **kwargs):
+        # tokens type may be Tuple[List[str]]
         if isinstance(tokens[0], str):
             tokens = [re.findall(self._re_tokenizer, s) for s in tokens]
         subword_tokens, subword_tok_ids, startofword_markers, subword_tags = [], [], [], []
+        if self.mode == "train" and self.upper_lower_text:
+            if isinstance(tokens, tuple):
+                tokens = list(tokens)
+            upper_lower = [random.uniform(0,1) for i in range(len(tokens))]
+            for i in range(len(tokens)):
+                if (upper_lower[i]<0.5):
+                    tokens[i] =[tokens[i][j].lower() for j in range(len(tokens[i]))]
         for i in range(len(tokens)):
             toks = tokens[i]
             ys = ['O'] * len(toks) if tags is None else tags[i]
