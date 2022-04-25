@@ -81,8 +81,8 @@
           "learning_rate_drop_div": 1.5,
           "seed": 42,
           "load_before_drop": true,
-          "save_path": "{MODEL_PATH}/model_both_sentencelevel_2",
-          "load_path": "{MODEL_PATH}/model_both_sentencelevel_2",
+          "save_path": "{MODEL_PATH}/model",
+          "load_path": "{MODEL_PATH}/model",
           "in": [
             "x_subword_tok_ids",
             "attention_mask",
