@@ -9,7 +9,3 @@ deeppavlov.models.bert
 .. autoclass:: deeppavlov.models.bert.bert_sequence_tagger.BertSequenceNetwork
 
     .. automethod:: train_on_batch
-
-.. autoclass:: deeppavlov.models.bert.bert_sequence_tagger.BertSequenceTagger
-
-    .. automethod:: __call__
