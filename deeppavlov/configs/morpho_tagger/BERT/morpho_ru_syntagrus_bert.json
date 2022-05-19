@@ -25,7 +25,7 @@
       },
       {
         "class_name": "torch_transformers_ner_preprocessor",
-        "vocab_file": "DeepPavlov/rubert-base-cased",
+        "vocab_file": "{TRANSFORMER}",
         "do_lower_case": false,
         "max_seq_length": 512,
         "max_subword_length": 15,
@@ -49,29 +49,31 @@
           "END"
         ],
         "pad_with_zeros": true,
-        "save_path": "{WORK_PATH}/tag.dict",
-        "load_path": "{WORK_PATH}/tag.dict"
+        "save_path": "{MODEL_PATH}/tag.dict",
+        "load_path": "{MODEL_PATH}/tag.dict"
       },
       {
-        "class_name": "bert_sequence_tagger",
+        "class_name": "torch_transformers_sequence_tagger",
         "n_tags": "#tag_vocab.len",
-        "keep_prob": 0.1,
-        "bert_config_file": "{BERT_PATH}/bert_config.json",
-        "pretrained_bert": "{BERT_PATH}/bert_model.ckpt",
+        "pretrained_bert": "{TRANSFORMER}",
         "attention_probs_keep_prob": 0.5,
         "use_crf": false,
         "return_probas": false,
         "encoder_layer_ids": [6, 7, 8, 9, 10, 11],
-        "optimizer": "tf.train:AdamOptimizer",
-        "learning_rate": 1e-3,
-        "bert_learning_rate": 2e-5,
-        "min_learning_rate": 1e-7,
+        "optimizer": "AdamW",
+        "optimizer_parameters": {
+          "lr": 2e-05,
+          "weight_decay": 1e-06,
+          "betas": [0.9, 0.999],
+          "eps": 1e-06
+        },
+        "min_learning_rate": 1e-07,
         "learning_rate_drop_patience": 30,
         "learning_rate_drop_div": 1.5,
         "load_before_drop": true,
         "clip_norm": null,
-        "save_path": "{WORK_PATH}/model",
-        "load_path": "{WORK_PATH}/model",
+        "save_path": "{MODEL_PATH}/model",
+        "load_path": "{MODEL_PATH}/model",
         "in": ["x_subword_tok_ids", "attention_mask", "startofword_markers"],
         "in_y": ["y_ind"],
         "out": ["y_predicted_ind"]
@@ -133,12 +135,12 @@
     "val_every_n_epochs": 1,
     "val_every_n_batches": 300,
 
-    "tensorboard_log_dir": "{WORK_PATH}/logs",
+    "tensorboard_log_dir": "{MODEL_PATH}/logs",
     "show_examples": false,
     "pytest_max_batches": 2,
     "pytest_batch_size": 8,
     "evaluation_targets": ["valid", "test"],
-    "class_name": "nn_trainer"
+    "class_name": "torch_trainer"
   },
   "metadata": {
     "variables": {
@@ -146,16 +148,13 @@
       "DOWNLOADS_PATH": "{ROOT_PATH}/downloads",
       "MODELS_PATH": "{ROOT_PATH}/models",
       "BERT_PATH": "{DOWNLOADS_PATH}/bert_models/rubert_cased_L-12_H-768_A-12_v1",
-      "WORK_PATH": "{MODELS_PATH}/morpho_ru_syntagrus"
+      "MODEL_PATH": "{MODELS_PATH}/morpho_ru_syntagrus_torch",
+      "TRANSFORMER": "DeepPavlov/rubert-base-cased"
     },
     "download": [
       {
-        "url": "http://files.deeppavlov.ai/deeppavlov_data/morpho_tagger/BERT/morpho_ru_syntagrus_bert.tar.gz",
-        "subdir": "{WORK_PATH}"
-      },
-      {
-        "url": "http://files.deeppavlov.ai/deeppavlov_data/bert/rubert_cased_L-12_H-768_A-12_v1.tar.gz",
-        "subdir": "{DOWNLOADS_PATH}/bert_models"
+        "url": "http://files.deeppavlov.ai/v1/morpho/ru_syntagrus/morpho_ru_syntagrus_bert_torch.tar.gz",
+        "subdir": "{MODEL_PATH}"
       },
       {
         "url": "http://files.deeppavlov.ai/deeppavlov_data/morpho_tagger/UD2.3/ru_syntagrus.tar.gz",
