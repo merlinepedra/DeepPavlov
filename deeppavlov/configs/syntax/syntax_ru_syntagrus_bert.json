@@ -25,8 +25,8 @@
         ]
       },
       {
-        "class_name": "bert_ner_preprocessor",
-        "vocab_file": "{BERT_PATH}/vocab.txt",
+        "class_name": "torch_transformers_ner_preprocessor",
+        "vocab_file": "DeepPavlov/rubert-base-cased",
         "do_lower_case": false,
         "max_seq_length": 512,
         "max_subword_length": 15,
