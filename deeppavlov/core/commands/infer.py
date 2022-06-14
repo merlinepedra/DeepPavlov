@@ -102,7 +102,7 @@ def interact_model(config: Union[str, Path, dict]) -> None:
 
 
 def write_to_jsonl(data: Iterable[dict], json_name: Optional[str]) -> None:
-    filepath = f'./{json_name}.jsonl'
+    filepath = f'{json_name}.jsonl'
 
     with jsonlines.open(filepath, mode='w') as writer:
         writer.write_all(data) 
@@ -150,8 +150,8 @@ def predict_on_stream(config: Union[str, Path, dict],
             entities_list.append(entities)
             predictions.append(prediction)
 
-            if (idx + 1) % 100 == 0:
-                print(f'{idx} examples done')
+            if (idx + 1) % 500 == 0:
+                print(f'{idx + 1} examples done')
     
         output = defaultdict(
             lambda: {
@@ -198,6 +198,9 @@ def predict_on_stream(config: Union[str, Path, dict],
             answers = batch["answer"]
 
             predictions = model(contexts, answers)
+
+            if (idx + 1) % 500 == 0:
+                print(f'{idx + 1} examples done')
 
             for p, q, a, pred in zip(paragraph_indices, question_indices, answer_indices, predictions):
                 tmp_output.append(dict(paragraph=int(p), question=int(q), answer=int(a), label=pred))
