@@ -102,7 +102,7 @@ def interact_model(config: Union[str, Path, dict]) -> None:
 
 
 def write_to_jsonl(data: Iterable[dict], json_name: Optional[str]) -> None:
-    filepath = f'./test_submission/{json_name}.jsonl'
+    filepath = f'./{json_name}.jsonl'
 
     with jsonlines.open(filepath, mode='w') as writer:
         writer.write_all(data) 
