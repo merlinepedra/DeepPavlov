@@ -101,7 +101,21 @@ def interact_model(config: Union[str, Path, dict]) -> None:
         print('>>', *pred)
 
 
-def write_to_jsonl(data: Iterable[dict], json_name: Optional[str]) -> None:
+def write_to_jsonl(data: Iterable[dict], task_name: Optional[str]) -> None:
+
+    task_name_dict = {
+        'danetqa': 'DaNetQA',
+        'rcb': 'RCB',
+        'parus': 'PARus',
+        'muserc': 'MuSeRC',
+        'rucos': 'RuCoS',
+        'russe': 'RUSSE',
+        'rwsd': 'RWSD',
+        'lidirus': 'LiDiRus',
+        'terra': 'TERRa'
+    }
+
+    json_name = task_name_dict[task_name]
     filepath = f'{json_name}.jsonl'
 
     with jsonlines.open(filepath, mode='w') as writer:
@@ -152,6 +166,7 @@ def predict_on_stream(config: Union[str, Path, dict],
 
             if (idx + 1) % 500 == 0:
                 print(f'{idx + 1} examples done')
+                break
     
         output = defaultdict(
             lambda: {
@@ -239,7 +254,7 @@ def predict_on_stream(config: Union[str, Path, dict],
                     if question["idx"] == question_idx:
                         question["answers"].append(dict(idx=answer_idx, label=label))
     
-        output = [value for _, value in output.items()]
+        submission = [value for _, value in output.items()]
 
     else:
         for idx, (x, _) in enumerate(data_gen):
