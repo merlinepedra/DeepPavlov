@@ -112,7 +112,11 @@ def write_to_jsonl(data: Iterable[dict], task_name: Optional[str]) -> None:
         'russe': 'RUSSE',
         'rwsd': 'RWSD',
         'lidirus': 'LiDiRus',
-        'terra': 'TERRa'
+        'terra': 'TERRa',
+        'record': 'ReCoRD',
+        'cops': 'COPA',
+        'multirc': 'MultiRC',
+        'boolq': 'BoolQ'
     }
 
     json_name = task_name_dict[task_name]
@@ -166,7 +170,6 @@ def predict_on_stream(config: Union[str, Path, dict],
 
             if (idx + 1) % 500 == 0:
                 print(f'{idx + 1} examples done')
-                break
     
         output = defaultdict(
             lambda: {
@@ -204,21 +207,25 @@ def predict_on_stream(config: Union[str, Path, dict],
                 print(f'{idx + 1} examples done')
     
     elif task_name == 'muserc' or task_name == 'multirc':
+        tmp_output = []
         for idx, (x, _) in enumerate(data_gen):
-            indices = batch["idx"]
-            paragraph_indices = indices["paragraph"]
-            question_indices = indices["question"]
-            answer_indices = indices["answer"]
-            contexts = batch["context"]
-            answers = batch["answer"]
+            contexts = x[0][0]
+            answers = x[0][1]
 
-            predictions = model(contexts, answers)
+            indices = x[0][2]
+            paragraph_ind = indices['paragraph']
+            question_ind = indices['question']
+            answer_ind = indices['answer']
+
+            prediction = model(contexts, answers)
+
+            tmp_output.append(dict(paragraph=int(paragraph_ind), 
+                                   question=int(question_ind), 
+                                   answer=int(answer_ind), 
+                                   label=prediction[0]))
 
             if (idx + 1) % 500 == 0:
                 print(f'{idx + 1} examples done')
-
-            for p, q, a, pred in zip(paragraph_indices, question_indices, answer_indices, predictions):
-                tmp_output.append(dict(paragraph=int(p), question=int(q), answer=int(a), label=pred))
 
         output = {}
         for line in tmp_output:
@@ -260,7 +267,7 @@ def predict_on_stream(config: Union[str, Path, dict],
         for idx, (x, _) in enumerate(data_gen):
             prediction = model.compute(x)
 
-            if isinstance(prediction, list):
+            while isinstance(prediction, list):
                 prediction = prediction[0]                
 
             submission.append({'idx': idx, 'label': prediction})
