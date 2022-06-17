@@ -70,17 +70,32 @@ class HuggingFaceDatasetReader(DatasetReader):
         elif isinstance(downsample_ratio, list) and len(downsample_ratio) != len(split_mapping):
             raise ValueError("The number of downsample ratios must be the same as the number of splits")
 
-        dataset = load_dataset(path=path, name=name, split=list(split_mapping.values()), **kwargs)
-        if path == "super_glue" and name == "copa":
-            dataset = [dataset_split.map(preprocess_copa, batched=True) for dataset_split in dataset]
+        if path == "russian_super_glue" and "_mixed" in name:
+            dataset = load_dataset(
+                path=path, name=name.replace("_mixed", ""), split=list(split_mapping.values()), **kwargs
+            )
+        else:
+            dataset = load_dataset(
+                path=path, name=name, split=list(split_mapping.values()), **kwargs
+            )
+        if (path == "super_glue" and name == "copa") or (path == "russian_super_glue" and name == "parus"):
+            lang = "en" if name == "copa" else "ru"
+            dataset = [
+                dataset_split.map(preprocess_copa, batched=True, fn_kwargs={"lang": lang}) for dataset_split in dataset
+            ]
         elif path == "super_glue" and name == "boolq":
-            dataset = load_dataset(path=path,
-                                   name=name,
-                                   split=interleave_splits(splits=list(split_mapping.values()),
-                                                           percentage=percentage),
-                                   **kwargs)
+            # danetqa doesn't require the same preprocessing
+            dataset = load_dataset(
+                path=path,
+                name=name,
+                split=interleave_splits(
+                    splits=list(split_mapping.values()),
+                    percentage=percentage
+                ),
+                **kwargs
+            )
             dataset = [dataset_split.map(preprocess_boolq, batched=True) for dataset_split in dataset]
-        elif path == "super_glue" and name == "record":
+        elif (path == "super_glue" and name == "record") or (path == "russian_super_glue" and name == "rucos"):
             label_column = "label"
             dataset = [
                 binary_downsample(
@@ -99,6 +114,55 @@ class HuggingFaceDatasetReader(DatasetReader):
                 for dataset_split, ratio
                 in zip(dataset, downsample_ratio)
             ]
+        elif (path == "super_glue" and name == "multirc") or (path == "russian_super_glue" and name == "muserc"):
+            dataset = [
+                dataset_split.map(
+                    preprocess_multirc, batched=True, remove_columns=["paragraph", "question"]
+                ) for dataset_split in dataset
+            ]
+        elif (path == "super_glue" and name == "wsc") or (path == "russian_super_glue" and name == "rwsd"):
+            dataset = [
+                dataset_split.map(
+                    preprocess_wsc,
+                    batched=True,
+                    remove_columns=["span1_index", "span2_index", "span1_text", "span2_text"],
+                ) for dataset_split in dataset
+            ]
+        elif path == "russian_super_glue" and name == "terra_mixed" and "train" in list(split_mapping.values()):
+            tmp_dataset = []
+            for d, split in zip(dataset, split_mapping.values()):
+                if split == "train":
+                    to_mix = load_dataset("super_glue", "rte", split="train")
+                    combined_train = concatenate_datasets([to_mix, d])
+                    tmp_dataset.append(combined_train)
+                else:
+                    tmp_dataset.append(d)
+            dataset = tmp_dataset
+
+        elif path == "russian_super_glue" and name == "rcb_mixed" and "train" in list(split_mapping.values()):
+            tmp_dataset = []
+            for d, split in zip(dataset, split_mapping.values()):
+                if split == "train":
+                    to_mix = load_dataset("super_glue", "cb", split="train")
+                    combined_train = concatenate_datasets([to_mix, d.remove_columns(["verb", "negation"])])
+                    tmp_dataset.append(combined_train)
+                else:
+                    tmp_dataset.append(d.remove_columns(["verb", "negation"]))
+            dataset = tmp_dataset
+        elif path == "russian_super_glue" and name == "danetqa_mixed" and "train" in list(split_mapping.values()):
+            tmp_dataset = []
+            for d, split in zip(dataset, split_mapping.values()):
+                if split == "train":
+                    to_mix = load_dataset(
+                        "super_glue", "boolq", split="train"
+                    ).map(
+                        preprocess_boolq, batched=True
+                    ).cast(d.features)
+                    combined_train = concatenate_datasets([to_mix, d])
+                    tmp_dataset.append(combined_train)
+                else:
+                    tmp_dataset.append(d)
+            dataset = tmp_dataset
         return dict(zip(split_mapping.keys(), dataset))
 
 
