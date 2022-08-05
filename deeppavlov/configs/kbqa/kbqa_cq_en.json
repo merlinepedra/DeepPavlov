@@ -69,10 +69,10 @@
         "entities_to_leave": 5,
         "rels_to_leave": 10,
         "in": ["x_punct", "x_punct", "template_type", "f_entity_substr", "f_tags", "answer_types"],
-        "out": ["answers"]
+        "out": ["answers", "queries"]
       }
     ],
-    "out": ["answers"]
+    "out": ["answers", "queries"]
   },
   "metadata": {
     "variables": {

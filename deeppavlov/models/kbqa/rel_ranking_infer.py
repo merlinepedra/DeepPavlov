@@ -88,7 +88,7 @@ class RelRankerInfer(Component, Serializable):
                  candidate_answers_list: List[List[Tuple[str]]],
                  entities_list: List[List[str]] = None,
                  template_answers_list: List[str] = None) -> List[str]:
-        answers = []
+        answers, queries = [], []
         confidence = 0.0
         if entities_list is None:
             entities_list = [[] for _ in questions_list]
@@ -107,14 +107,16 @@ class RelRankerInfer(Component, Serializable):
                     rels_labels_batch = []
                     answers_batch = []
                     entities_batch = []
+                    queries_batch = []
                     confidences_batch = []
                     for candidate_ans_and_rels in candidate_answers[i * self.batch_size: (i + 1) * self.batch_size]:
                         candidate_rels = []
-                        candidate_rels_str, candidate_answer = "", ""
+                        candidate_rels_str, candidate_answer, query = "", "", ""
                         candidate_entities, candidate_confidence = [], []
                         if candidate_ans_and_rels:
                             candidate_rels = candidate_ans_and_rels["relations"]
                             candidate_rels = [candidate_rel.split('/')[-1] for candidate_rel in candidate_rels]
+                            query = candidate_ans_and_rels["query"]
                             candidate_answer = candidate_ans_and_rels["answers"]
                             candidate_entities = candidate_ans_and_rels["entities"]
                             candidate_confidence = candidate_ans_and_rels["rel_conf"]
@@ -125,6 +127,7 @@ class RelRankerInfer(Component, Serializable):
                             questions_batch.append(question)
                             rels_batch.append(candidate_rels)
                             rels_labels_batch.append(candidate_rels_str)
+                            queries_batch.append(query)
                             answers_batch.append(candidate_answer)
                             entities_batch.append(candidate_entities)
                             confidences_batch.append(candidate_confidence)
@@ -132,20 +135,22 @@ class RelRankerInfer(Component, Serializable):
                     if questions_batch:
                         probas = self.ranker(questions_batch, rels_labels_batch)
                         probas = [proba[1] for proba in probas]
-                        for j, (answer, entities, confidence, rels_ids, rels_labels) in \
+                        for j, (answer, entities, confidence, rels_ids, rels_labels, query) in \
                                 enumerate(zip(answers_batch, entities_batch, confidences_batch, rels_batch,
-                                              rels_labels_batch)):
+                                              rels_labels_batch, queries_batch)):
                             answers_with_scores.append(
-                                (answer, entities, rels_labels, rels_ids, max(probas[j], confidence)))
+                                (answer, entities, rels_labels, rels_ids, query, max(probas[j], confidence)))
 
                 answers_with_scores = sorted(answers_with_scores, key=lambda x: x[-1], reverse=True)
             else:
                 answers_with_scores = [(answer, rels, conf) for *rels, answer, conf in candidate_answers]
 
+            query = ""
             answer_ids = tuple()
             if answers_with_scores:
                 log.debug(f"answers: {answers_with_scores[0]}")
                 answer_ids = answers_with_scores[0][0]
+                query = answers_with_scores[0][4]
                 if self.return_all_possible_answers and isinstance(answer_ids, tuple):
                     answer_ids_input = [(answer_id, question) for answer_id in answer_ids]
                     answer_ids = [answer_id.split("/")[-1] for answer_id in answer_ids]
@@ -170,6 +175,7 @@ class RelRankerInfer(Component, Serializable):
                         answer = sentence_answer(question, answer, entities, template_answer)
                     except:
                         log.info("Error in sentence answer")
+                query = self.fill_query_labels(query, answer)
                 confidence = answers_with_scores[0][2]
             if self.return_confidences:
                 answers.append((answer, confidence))
@@ -180,13 +186,14 @@ class RelRankerInfer(Component, Serializable):
                     answers.append((answer, answer_ids))
                 else:
                     answers.append(answer)
+            queries.append(query)
         if not answers:
             if self.return_confidences:
                 answers.append(("Not found", 0.0))
             else:
                 answers.append("Not found")
 
-        return answers
+        return answers, queries
 
     def rank_rels(self, question: str, candidate_rels: List[str]) -> List[Tuple[str, Any]]:
         rels_with_scores = []
@@ -214,3 +221,26 @@ class RelRankerInfer(Component, Serializable):
             rels_with_scores = sorted(rels_with_scores, key=lambda x: x[1], reverse=True)
 
         return rels_with_scores[:self.rels_to_leave]
+
+    def fill_query_labels(self, query, answer):
+        answer_ent = ""
+        for subj, rel, obj in query:
+            if subj.startswith("?") and not obj.startswith("?"):
+                answer_ent = subj
+            elif obj.startswith("?") and not subj.startswith("?"):
+                answer_ent = obj
+        filled_triplets = []
+        for subj, rel, obj in query:
+            if not subj.startswith("?"):
+                answer_labels = self.wiki_parser(["find_label"], [(subj, "")])
+                subj = answer_labels[0]
+            elif subj == answer_ent:
+                subj = answer
+            if not obj.startswith("?"):
+                answer_labels = self.wiki_parser(["find_label"], [(obj, "")])
+                obj = answer_labels[0]
+            elif obj == answer_ent:
+                obj = answer
+            rel = self.rel_q2name.get(rel.split("/")[-1], "")
+            filled_triplets.append([subj, rel, obj])
+        return filled_triplets

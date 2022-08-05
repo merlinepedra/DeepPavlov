@@ -175,6 +175,7 @@ class QueryGenerator(QueryGeneratorBase):
         parser_info_list = []
         confidences_list = []
         all_combs_list = list(itertools.product(entity_combs, type_combs, rel_combs))
+        filled_queries_list = []
         for comb_num, combs in enumerate(all_combs_list):
             confidence = np.prod([score for rel, score in combs[2][:-1]])
             confidences_list.append(confidence)
@@ -187,6 +188,7 @@ class QueryGenerator(QueryGeneratorBase):
             queries_list.append(
                 (rels_from_query + answer_ent, query_hdt_seq, filter_info, order_info, answer_types, rel_types,
                  return_if_found))
+            filled_queries_list.append(query_hdt_seq)
 
             parser_info_list.append("query_execute")
             if comb_num == self.max_comb_num:
@@ -201,30 +203,33 @@ class QueryGenerator(QueryGeneratorBase):
             outputs_len = len(candidate_outputs_list)
             all_combs_list = all_combs_list[:outputs_len]
             confidences_list = confidences_list[:outputs_len]
-            for combs, confidence, candidate_output in zip(all_combs_list, confidences_list, candidate_outputs_list):
-                candidate_outputs += [[combs[0]] + [rel for rel, score in combs[2][:-1]] + output + [confidence]
+            for combs, confidence, candidate_output, filled_query in \
+                    zip(all_combs_list, confidences_list, candidate_outputs_list, filled_queries_list):
+                candidate_outputs += [[(combs[0], filled_query)] + [rel for rel, score in combs[2][:-1]] + output + [confidence]
                                       for output in candidate_output]
 
             if self.return_all_possible_answers:
                 candidate_outputs_dict = OrderedDict()
                 for candidate_output in candidate_outputs:
-                    candidate_output_key = (tuple(candidate_output[0]), tuple(candidate_output[1:-2]))
+                    candidate_output_key = (tuple(candidate_output[0][0]), tuple(candidate_output[1:-2]))
                     if candidate_output_key not in candidate_outputs_dict:
                         candidate_outputs_dict[candidate_output_key] = []
-                    candidate_outputs_dict[candidate_output_key].append(candidate_output[-2:])
+                    candidate_outputs_dict[candidate_output_key].append(candidate_output[-2:] + [candidate_output[0][1]])
                 candidate_outputs = []
                 for (candidate_entity_comb, candidate_rel_comb), candidate_output in candidate_outputs_dict.items():
                     candidate_outputs.append({"entities": candidate_entity_comb,
                                               "relations": list(candidate_rel_comb),
+                                              "query": candidate_output[0][2],
                                               "answers": tuple([ans for ans, conf in candidate_output]),
                                               "rel_conf": candidate_output[0][1]
                                               })
             else:
                 candidate_outputs = [{"entities": f_entities,
                                       "relations": f_relations,
+                                      "query": f_query,
                                       "answers": f_answers,
                                       "rel_conf": f_rel_conf
-                                      } for f_entities, *f_relations, f_answers, f_rel_conf in candidate_outputs]
+                                      } for (f_entities, f_query), *f_relations, f_answers, f_rel_conf in candidate_outputs]
         log.debug(f"(query_parser)final outputs: {candidate_outputs[:3]}")
 
         return candidate_outputs
